@@ -6,7 +6,7 @@ import telebot
 from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
-from trade_logger import log_trade
+from utils.sheets_logger import log_trade
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
