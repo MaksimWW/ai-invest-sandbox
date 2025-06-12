@@ -186,6 +186,10 @@ def run_telegram_bot():
                 bot.reply_to(msg, f"📝 Обрабатываю сделку: {side.upper()} {ticker.upper()} {qty} шт по {price}...")
                 
                 print(f"[DEBUG] Вызываем log_trade для {ticker}")
+                
+                # Импортируем функцию внутри обработчика
+                from utils.sheets_logger import log_trade
+                
                 resp = log_trade(
                     date=datetime.now().date(),
                     ticker=ticker.upper(),
