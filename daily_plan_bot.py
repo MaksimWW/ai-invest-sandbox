@@ -199,9 +199,20 @@ def run_telegram_bot():
                 bot.reply_to(msg, f"📊 Детали: {ticker.upper()} {side.upper()} {qty}x{price} = {int(qty) * float(price.replace(',', '.')):.2f} ₽")
                 
             except Exception as e:
-                bot.reply_to(msg, f"❌ ошибка записи: {e}")
-                # Отправляем дополнительную информацию об ошибке
-                bot.reply_to(msg, f"🔍 Проверьте файл debug_sheets.log для подробностей")
+                error_msg = str(e)
+                bot.reply_to(msg, f"❌ ошибка записи: {error_msg}")
+                
+                # Если это ошибка Google Apps Script, даем конкретные рекомендации
+                if "Google Apps Script" in error_msg or "appendRow" in error_msg:
+                    bot.reply_to(msg, """
+🔧 Проблема с Google Apps Script:
+1. Проверьте ID таблицы Google Sheets
+2. Убедитесь, что скрипт имеет доступ к таблице
+3. Проверьте имя листа (обычно 'Sheet1' или 'Лист1')
+4. Убедитесь, что скрипт опубликован как веб-приложение
+                    """)
+                else:
+                    bot.reply_to(msg, f"🔍 Проверьте файл debug_sheets.log для подробностей")
         
         elif text.startswith("/prices"):
             try:
@@ -241,6 +252,22 @@ def run_telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
         
+        elif text.startswith("/test_sheets"):
+            try:
+                from utils.sheets_logger import log_trade
+                result = log_trade(
+                    date=datetime.now().date(),
+                    ticker="TEST",
+                    figi="TEST_FIGI",
+                    side="BUY",
+                    price=100.0,
+                    qty=1,
+                    fees=0.1
+                )
+                bot.reply_to(msg, f"✅ Тест Google Sheets успешен: {result}")
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Тест Google Sheets не прошел: {e}")
+        
         elif text.startswith("/help"):
             help_text = """
 🤖 Доступные команды:
@@ -251,6 +278,7 @@ def run_telegram_bot():
 /prices - показать актуальные цены
 /signals - показать торговые сигналы
 /debug - показать лог отладки
+/test_sheets - проверить подключение к Google Sheets
 /help - показать эту справку
 
 Доступные тикеры: YNDX, FXIT

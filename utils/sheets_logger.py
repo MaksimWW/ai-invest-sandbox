@@ -50,16 +50,36 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         f.write(f"[{dt.datetime.now()}] Payload: {json.dumps(payload, ensure_ascii=False)}\n")
     
     try:
-        r = requests.post(WEBHOOK, data=payload, timeout=5)
+        r = requests.post(WEBHOOK, data=payload, timeout=10)
         r.raise_for_status()
+        
+        # Проверяем содержимое ответа
+        response_text = r.text
         
         # Логируем ответ
         with open("debug_sheets.log", "a", encoding="utf-8") as f:
-            f.write(f"[{dt.datetime.now()}] Response: {r.text}\n")
+            f.write(f"[{dt.datetime.now()}] HTTP Status: {r.status_code}\n")
+            f.write(f"[{dt.datetime.now()}] Response Headers: {dict(r.headers)}\n")
+            f.write(f"[{dt.datetime.now()}] Response Body: {response_text}\n")
         
-        return r.text
+        # Проверяем, если ответ содержит HTML (ошибка от Google)
+        if response_text.strip().startswith('<!DOCTYPE html>') or '<html>' in response_text:
+            # Извлекаем текст ошибки из HTML
+            if 'TypeError:' in response_text:
+                error_start = response_text.find('TypeError:')
+                error_end = response_text.find('</div>', error_start)
+                if error_start != -1 and error_end != -1:
+                    error_msg = response_text[error_start:error_end]
+                    # Декодируем HTML entities
+                    error_msg = error_msg.replace('&#39;', "'").replace('&quot;', '"')
+                    raise RuntimeError(f"❌ Ошибка в Google Apps Script: {error_msg}")
+            
+            raise RuntimeError("❌ Google Apps Script вернул HTML страницу с ошибкой. Проверьте настройки скрипта.")
+        
+        return response_text
+        
     except requests.exceptions.RequestException as e:
         # Логируем ошибку
         with open("debug_sheets.log", "a", encoding="utf-8") as f:
-            f.write(f"[{dt.datetime.now()}] Error: {str(e)}\n")
-        raise RuntimeError(f"❌ Ошибка отправки данных в Google Sheets: {e}")
+            f.write(f"[{dt.datetime.now()}] Network Error: {str(e)}\n")
+        raise RuntimeError(f"❌ Ошибка сети при отправке данных в Google Sheets: {e}")
