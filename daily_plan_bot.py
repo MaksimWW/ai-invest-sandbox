@@ -166,7 +166,8 @@ def run_telegram_bot():
     
     @bot.message_handler(func=lambda message: True)
     def handle_message(msg):
-        text = msg.text.strip()
+        text = msg.text.strip() if msg.text else ""
+        print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username}")
         
         if text.startswith("/log"):
             parts = text.split()
@@ -253,23 +254,30 @@ def run_telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
         
-        elif text == "/test_sheets":
-            print("[DEBUG] Получена команда /test_sheets")
+        elif text.startswith("/test_sheets"):
+            print(f"[DEBUG] Получена команда: '{text}'")
+            bot.reply_to(msg, "🔄 Тестирую подключение к Google Sheets...")
+            
             try:
                 from utils.sheets_logger import log_trade
                 print("[DEBUG] Импорт utils.sheets_logger успешен")
+                
                 result = log_trade(
                     date=datetime.now().date(),
                     ticker="TEST",
-                    figi="TEST_FIGI",
+                    figi="TEST_FIGI", 
                     side="BUY",
                     price=100.0,
                     qty=1,
                     fees=0.1
                 )
-                bot.reply_to(msg, f"✅ Тест Google Sheets успешен: {result}")
+                
+                print(f"[DEBUG] Результат теста: {result}")
+                bot.reply_to(msg, f"✅ Тест Google Sheets успешен!\n📝 Ответ: {result[:200]}...")
+                
             except Exception as e:
-                bot.reply_to(msg, f"❌ Тест Google Sheets не прошел: {e}")
+                print(f"[DEBUG] Ошибка теста: {e}")
+                bot.reply_to(msg, f"❌ Тест Google Sheets не прошел:\n{str(e)[:300]}...")
         
         elif text == "/help":
             help_text = """🤖 Доступные команды:
