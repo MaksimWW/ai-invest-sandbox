@@ -181,6 +181,9 @@ def run_telegram_bot():
                 return
 
             try:
+                # Сначала отправляем подтверждение начала обработки
+                bot.reply_to(msg, f"📝 Обрабатываю сделку: {side.upper()} {ticker.upper()} {qty} шт по {price}...")
+                
                 resp = log_trade(
                     date=datetime.now().date(),
                     ticker=ticker.upper(),
@@ -191,8 +194,14 @@ def run_telegram_bot():
                     fees=0
                 )
                 bot.reply_to(msg, f"✅ записал сделку ({resp})")
+                
+                # Дополнительно уведомляем об успехе с деталями
+                bot.reply_to(msg, f"📊 Детали: {ticker.upper()} {side.upper()} {qty}x{price} = {int(qty) * float(price.replace(',', '.')):.2f} ₽")
+                
             except Exception as e:
                 bot.reply_to(msg, f"❌ ошибка записи: {e}")
+                # Отправляем дополнительную информацию об ошибке
+                bot.reply_to(msg, f"🔍 Проверьте файл debug_sheets.log для подробностей")
         
         elif text.startswith("/prices"):
             try:
@@ -215,6 +224,23 @@ def run_telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
         
+        elif text.startswith("/debug"):
+            try:
+                # Читаем последние 10 строк из лог-файла
+                with open("debug_sheets.log", "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    last_lines = lines[-10:] if len(lines) > 10 else lines
+                    log_content = "".join(last_lines)
+                
+                if log_content:
+                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
+                else:
+                    bot.reply_to(msg, "📋 Лог-файл пуст")
+            except FileNotFoundError:
+                bot.reply_to(msg, "📋 Лог-файл не найден")
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
+        
         elif text.startswith("/help"):
             help_text = """
 🤖 Доступные команды:
@@ -224,6 +250,7 @@ def run_telegram_bot():
 
 /prices - показать актуальные цены
 /signals - показать торговые сигналы
+/debug - показать лог отладки
 /help - показать эту справку
 
 Доступные тикеры: YNDX, FXIT

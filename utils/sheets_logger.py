@@ -44,9 +44,22 @@ def log_trade(date: dt.date, ticker: str, figi: str,
     
     print("[DEBUG] send to sheets:", payload)
     
+    # Дополнительно логируем в файл для отладки
+    import json
+    with open("debug_sheets.log", "a", encoding="utf-8") as f:
+        f.write(f"[{dt.datetime.now()}] Payload: {json.dumps(payload, ensure_ascii=False)}\n")
+    
     try:
         r = requests.post(WEBHOOK, data=payload, timeout=5)
         r.raise_for_status()
+        
+        # Логируем ответ
+        with open("debug_sheets.log", "a", encoding="utf-8") as f:
+            f.write(f"[{dt.datetime.now()}] Response: {r.text}\n")
+        
         return r.text
     except requests.exceptions.RequestException as e:
+        # Логируем ошибку
+        with open("debug_sheets.log", "a", encoding="utf-8") as f:
+            f.write(f"[{dt.datetime.now()}] Error: {str(e)}\n")
         raise RuntimeError(f"❌ Ошибка отправки данных в Google Sheets: {e}")
