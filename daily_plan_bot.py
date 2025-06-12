@@ -4,6 +4,7 @@ import os
 import requests
 from datetime import datetime
 from tinkoff.invest import Client
+from signals.sma_breakout import generate_signal
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -41,21 +42,45 @@ def get_last_prices():
     
     return prices
 
-def format_message(prices):
-    """Форматирует сообщение с ценами"""
+def get_signals():
+    """Получает торговые сигналы для всех FIGI"""
+    signals = {}
+    
+    for figi, ticker in FIGIS.items():
+        try:
+            signal = generate_signal(figi, 'hour')
+            signals[ticker] = signal
+        except Exception as e:
+            print(f"❌ Ошибка получения сигнала для {ticker}: {e}")
+            signals[ticker] = "HOLD"
+    
+    return signals
+
+def format_message(prices, signals):
+    """Форматирует сообщение с ценами и сигналами"""
     today = datetime.now().strftime("%Y-%m-%d")
     message = f"📈 План на {today}\n"
     
-    for ticker, price in prices.items():
+    for ticker in prices.keys():
+        price = prices[ticker]
+        signal = signals.get(ticker, "HOLD")
+        
         # Форматируем цену с разделителем тысяч
         formatted_price = f"{price:,.2f}".replace(",", " ")
         message += f"• {ticker}: {formatted_price} ₽\n"
+        message += f"  Signal: {signal}\n"
     
     return message.strip()
 
+def is_telegram_configured():
+    """Проверяет, настроен ли Telegram"""
+    return (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID and 
+            TELEGRAM_TOKEN != "PLACEHOLDER" and 
+            TELEGRAM_CHAT_ID != "PLACEHOLDER")
+
 def send_telegram_message(message):
     """Отправляет сообщение в Telegram"""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+    if not is_telegram_configured():
         return False
     
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -80,11 +105,15 @@ def main():
         print("📊 Получаем актуальные цены...")
         prices = get_last_prices()
         
+        # Получаем сигналы
+        print("📈 Анализируем торговые сигналы...")
+        signals = get_signals()
+        
         # Формируем сообщение
-        message = format_message(prices)
+        message = format_message(prices, signals)
         
         # Отправляем или выводим в консоль
-        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        if is_telegram_configured():
             print("📤 Отправляем сообщение в Telegram...")
             if send_telegram_message(message):
                 print("✅ Сообщение успешно отправлено!")
@@ -93,7 +122,7 @@ def main():
                 print("📋 Сообщение:")
                 print(message)
         else:
-            print("⚠️  Telegram токен или chat_id не настроены")
+            print("⚠️  Telegram токен или chat_id не настроены/заданы как PLACEHOLDER")
             print("📋 Сообщение:")
             print(message)
             
