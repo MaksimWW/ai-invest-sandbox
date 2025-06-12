@@ -2,10 +2,11 @@
 #!/usr/bin/env python
 import os
 import requests
+import telebot
 from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
-from trade_logger import log_signal_trade
+from trade_logger import log_trade
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -17,6 +18,9 @@ FIGIS = {
     "BBG004730N88": "YNDX",  # Яндекс
     "BBG00Y91R9T3": "FXIT"   # Fix Price
 }
+
+# Обратная карта для поиска FIGI по тикеру
+FIGI_MAP = {ticker: figi for figi, ticker in FIGIS.items()}
 
 def get_last_prices():
     """Получает последние цены акций через Tinkoff Sandbox API"""
@@ -99,8 +103,26 @@ def send_telegram_message(message):
         print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
 
-def main():
-    """Основная функция бота"""
+def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
+    """Упрощенная функция для логирования сделок по сигналам бота"""
+    if signal in ['BUY', 'SELL']:
+        try:
+            result = log_trade(
+                date=datetime.now().date(),
+                ticker=ticker,
+                figi=figi,
+                side=signal,
+                price=price,
+                qty=qty
+            )
+            print(f"✅ Сделка {signal} {ticker} логирована: {result}")
+        except Exception as e:
+            print(f"❌ Ошибка логирования сделки {ticker}: {e}")
+    else:
+        print(f"📝 {ticker}: сигнал {signal} - сделка не выполняется")
+
+def run_daily_analysis():
+    """Запускает ежедневный анализ и отправляет отчет"""
     try:
         # Получаем цены
         print("📊 Получаем актуальные цены...")
@@ -133,6 +155,97 @@ def main():
             
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
+
+def run_telegram_bot():
+    """Запускает Telegram бота для обработки команд"""
+    if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "PLACEHOLDER":
+        print("❌ TELEGRAM_TOKEN не настроен! Бот не может быть запущен.")
+        return
+    
+    bot = telebot.TeleBot(TELEGRAM_TOKEN)
+    
+    @bot.message_handler(func=lambda message: True)
+    def handle_message(msg):
+        text = msg.text.strip()
+        
+        if text.startswith("/log"):
+            parts = text.split()
+            if len(parts) != 5:
+                bot.reply_to(msg, "Формат: /log BUY|SELL TICKER QTY PRICE")
+                return
+
+            _, side, ticker, qty, price = parts
+            figi = FIGI_MAP.get(ticker.upper())
+            if not figi:
+                bot.reply_to(msg, f"FIGI для {ticker} не найден.")
+                return
+
+            try:
+                resp = log_trade(
+                    date=datetime.now().date(),
+                    ticker=ticker.upper(),
+                    figi=figi,
+                    side=side.upper(),
+                    price=float(price.replace(',', '.')),
+                    qty=int(qty),
+                    fees=0
+                )
+                bot.reply_to(msg, f"✅ записал сделку ({resp})")
+            except Exception as e:
+                bot.reply_to(msg, f"❌ ошибка записи: {e}")
+        
+        elif text.startswith("/prices"):
+            try:
+                prices = get_last_prices()
+                message = "💰 Актуальные цены:\n"
+                for ticker, price in prices.items():
+                    formatted_price = f"{price:,.2f}".replace(",", " ")
+                    message += f"• {ticker}: {formatted_price} ₽\n"
+                bot.reply_to(msg, message)
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка получения цен: {e}")
+        
+        elif text.startswith("/signals"):
+            try:
+                signals = get_signals()
+                message = "📊 Торговые сигналы:\n"
+                for ticker, signal in signals.items():
+                    message += f"• {ticker}: {signal}\n"
+                bot.reply_to(msg, message)
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
+        
+        elif text.startswith("/help"):
+            help_text = """
+🤖 Доступные команды:
+
+/log BUY|SELL TICKER QTY PRICE - записать сделку
+Пример: /log BUY YNDX 10 2500.50
+
+/prices - показать актуальные цены
+/signals - показать торговые сигналы
+/help - показать эту справку
+
+Доступные тикеры: YNDX, FXIT
+            """
+            bot.reply_to(msg, help_text)
+        
+        else:
+            bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
+    
+    print("🤖 Telegram бот запущен...")
+    bot.polling(none_stop=True)
+
+def main():
+    """Основная функция - выбор режима работы"""
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "bot":
+        # Режим Telegram бота
+        run_telegram_bot()
+    else:
+        # Режим разового анализа
+        run_daily_analysis()
 
 if __name__ == "__main__":
     main()
