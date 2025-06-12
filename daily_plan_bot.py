@@ -184,6 +184,7 @@ def run_telegram_bot():
                 # Сначала отправляем подтверждение начала обработки
                 bot.reply_to(msg, f"📝 Обрабатываю сделку: {side.upper()} {ticker.upper()} {qty} шт по {price}...")
                 
+                print(f"[DEBUG] Вызываем log_trade для {ticker}")
                 resp = log_trade(
                     date=datetime.now().date(),
                     ticker=ticker.upper(),
@@ -253,8 +254,10 @@ def run_telegram_bot():
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
         
         elif text == "/test_sheets":
+            print("[DEBUG] Получена команда /test_sheets")
             try:
                 from utils.sheets_logger import log_trade
+                print("[DEBUG] Импорт utils.sheets_logger успешен")
                 result = log_trade(
                     date=datetime.now().date(),
                     ticker="TEST",
