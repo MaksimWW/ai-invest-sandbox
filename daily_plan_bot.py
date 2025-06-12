@@ -5,6 +5,7 @@ import requests
 from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
+from trade_logger import log_signal_trade
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -108,6 +109,12 @@ def main():
         # Получаем сигналы
         print("📈 Анализируем торговые сигналы...")
         signals = get_signals()
+        
+        # Логируем сделки по сигналам
+        print("📝 Логируем торговые сигналы...")
+        for figi, ticker in FIGIS.items():
+            if ticker in prices and ticker in signals:
+                log_signal_trade(ticker, figi, signals[ticker], prices[ticker])
         
         # Формируем сообщение
         message = format_message(prices, signals)

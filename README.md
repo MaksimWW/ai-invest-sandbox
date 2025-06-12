@@ -41,6 +41,8 @@ python setup_sandbox.py
 TINKOFF_SANDBOX_TOKEN=ваш_токен_тинькофф
 TELEGRAM_TOKEN=ваш_telegram_bot_token
 TELEGRAM_CHAT_ID=ваш_chat_id
+SHEETS_WEBHOOK_URL=ваш_google_sheets_webhook_url
+SHEETS_TOKEN=ваш_токен_для_sheets
 ```
 
 2. **Получите Telegram токен:**
@@ -75,6 +77,29 @@ python daily_plan_bot.py
 - **HOLD** — нет пересечения или недостаточно данных
 
 Анализ проводится на часовых свечах за последние 200 периодов.
+
+## Логирование сделок в Google Sheets
+
+Бот может автоматически логировать торговые сигналы в Google Sheets для ведения журнала сделок.
+
+**Настройка:**
+
+1. Создайте Google Apps Script с webhook для приема данных
+2. Добавьте в `.env` файл:
+```
+SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+SHEETS_TOKEN=ваш_секретный_токен
+```
+
+**Функции:**
+- `log_trade()` — основная функция для логирования сделок
+- `log_signal_trade()` — упрощенная функция для сигналов бота
+- `test_sheets_connection()` — проверка подключения
+
+**Тестирование:**
+```bash
+python trade_logger.py
+```
 
 ### Пример сообщения
 
