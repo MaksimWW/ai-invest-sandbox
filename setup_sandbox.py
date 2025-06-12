@@ -13,7 +13,7 @@ def main():
     if not TOKEN:
         raise RuntimeError("❌ Переменная TINKOFF_SANDBOX_TOKEN не найдена!")
     
-    with Client(TOKEN, sandbox_token=TOKEN, app_name="ai-trader") as client:
+    with Client(TOKEN, app_name="ai-trader") as client:
         # Открываем песочный аккаунт
         acc = client.sandbox.open_sandbox_account().account_id
         print("Sandbox account:", acc)
@@ -24,8 +24,8 @@ def main():
             amount=to_money(START_CAPITAL),
         )
         
-        # Получаем баланс
-        portfolio = client.operations.get_portfolio(account_id=acc)
+        # Получаем баланс через sandbox service
+        portfolio = client.sandbox.get_sandbox_portfolio(account_id=acc)
         bal = portfolio.total_amount_portfolio
         print(f"Balance after pay-in: {bal.units} {bal.currency}")
 
