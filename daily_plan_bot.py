@@ -268,9 +268,8 @@ def run_telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Тест Google Sheets не прошел: {e}")
         
-        elif text.startswith("/help"):
-            help_text = """
-🤖 Доступные команды:
+        elif text == "/help":
+            help_text = """🤖 Доступные команды:
 
 /log BUY|SELL TICKER QTY PRICE - записать сделку
 Пример: /log BUY YNDX 10 2500.50
@@ -281,8 +280,7 @@ def run_telegram_bot():
 /test_sheets - проверить подключение к Google Sheets
 /help - показать эту справку
 
-Доступные тикеры: YNDX, FXIT
-            """
+Доступные тикеры: YNDX, FXIT"""
             bot.reply_to(msg, help_text)
         
         else:
