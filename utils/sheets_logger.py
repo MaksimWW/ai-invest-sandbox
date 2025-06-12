@@ -70,13 +70,46 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         # Проверяем, если ответ содержит HTML (ошибка от Google)
         if response_text.strip().startswith('<!DOCTYPE html>') or '<html>' in response_text:
             # Извлекаем текст ошибки из HTML
-            if 'TypeError:' in response_text:
-                error_start = response_text.find('TypeError:')
-                error_end = response_text.find('</div>', error_start)
-                if error_start != -1 and error_end != -1:
-                    error_msg = response_text[error_start:error_end]
-                    # Декодируем HTML entities
-                    error_msg = error_msg.replace('&#39;', "'").replace('&quot;', '"')
+            if 'TypeError:' in response_text or 'Error:' in response_text:
+                # Ищем различные варианты ошибок
+                error_patterns = ['TypeError:', 'ReferenceError:', 'Error:', 'Exception:']
+                error_msg = "Неизвестная ошибка"
+                
+                for pattern in error_patterns:
+                    error_start = response_text.find(pattern)
+                    if error_start != -1:
+                        # Ищем конец ошибки
+                        possible_ends = ['</div>', '</span>', '</p>', '\n', '(line']
+                        error_end = len(response_text)
+                        
+                        for end_pattern in possible_ends:
+                            end_pos = response_text.find(end_pattern, error_start)
+                            if end_pos != -1 and end_pos < error_end:
+                                error_end = end_pos
+                        
+                        error_msg = response_text[error_start:error_end].strip()
+                        # Декодируем HTML entities
+                        error_msg = error_msg.replace('&#39;', "'").replace('&quot;', '"').replace('&amp;', '&')
+                        break
+
+                # Специальные сообщения для типичных ошибок
+                if 'appendRow' in error_msg:
+                    detailed_msg = f"""
+🔧 Проблема с Google Apps Script: {error_msg}
+
+Возможные причины:
+1. Неправильный ID таблицы Google Sheets в скрипте
+2. Лист с именем 'Sheet1' или 'Лист1' не существует
+3. У скрипта нет прав доступа к таблице
+4. Таблица была удалена или перемещена
+
+Проверьте:
+• ID таблицы в коде Google Apps Script
+• Имя листа (должно совпадать с реальным)
+• Права доступа скрипта к таблице
+                    """
+                    raise RuntimeError(detailed_msg.strip())
+                else:
                     raise RuntimeError(f"❌ Ошибка в Google Apps Script: {error_msg}")
 
             raise RuntimeError("❌ Google Apps Script вернул HTML страницу с ошибкой. Проверьте настройки скрипта.")
