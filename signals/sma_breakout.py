@@ -56,7 +56,7 @@ def get_candles(figi, interval='hour', count=200):
             return df
             
         except Exception as e:
-            print(f"❌ Ошибка получения свечей для {figi}: {e}")
+            print(f"Ошибка получения свечей для {figi}: {e}")
             return pd.DataFrame()
 
 def calculate_sma(df, period):
@@ -103,18 +103,14 @@ def generate_signal(figi, interval='hour'):
         prev_sma20 = df.iloc[prev_idx]['sma20']
         prev_sma50 = df.iloc[prev_idx]['sma50']
         
-        # Проверяем пересечение
-        # BUY: SMA20 была ниже SMA50, теперь выше
+        # Проверяем пересечения
         if prev_sma20 <= prev_sma50 and current_sma20 > current_sma50:
-            return "BUY"
-        
-        # SELL: SMA20 была выше SMA50, теперь ниже
+            return "BUY"  # Пересечение снизу вверх
         elif prev_sma20 >= prev_sma50 and current_sma20 < current_sma50:
-            return "SELL"
-        
+            return "SELL"  # Пересечение сверху вниз
         else:
-            return "HOLD"
+            return "HOLD"  # Нет пересечения
             
     except Exception as e:
-        print(f"❌ Ошибка генерации сигнала для {figi}: {e}")
+        print(f"Ошибка генерации сигнала для {figi}: {e}")
         return "HOLD"
