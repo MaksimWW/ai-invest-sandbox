@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 import os
 import requests
@@ -26,9 +25,9 @@ def get_last_prices():
     """Получает последние цены акций через Tinkoff Sandbox API"""
     if not TINKOFF_SANDBOX_TOKEN:
         raise RuntimeError("❌ Переменная TINKOFF_SANDBOX_TOKEN не найдена!")
-    
+
     prices = {}
-    
+
     with Client(TINKOFF_SANDBOX_TOKEN, app_name="daily-plan-bot") as client:
         for figi, ticker in FIGIS.items():
             try:
@@ -44,13 +43,13 @@ def get_last_prices():
             except Exception as e:
                 print(f"❌ Ошибка получения цены для {ticker}: {e}")
                 prices[ticker] = 0.0
-    
+
     return prices
 
 def get_signals():
     """Получает торговые сигналы для всех FIGI"""
     signals = {}
-    
+
     for figi, ticker in FIGIS.items():
         try:
             signal = generate_signal(figi, 'hour')
@@ -58,23 +57,23 @@ def get_signals():
         except Exception as e:
             print(f"❌ Ошибка получения сигнала для {ticker}: {e}")
             signals[ticker] = "HOLD"
-    
+
     return signals
 
 def format_message(prices, signals):
     """Форматирует сообщение с ценами и сигналами"""
     today = datetime.now().strftime("%Y-%m-%d")
     message = f"📈 План на {today}\n"
-    
+
     for ticker in prices.keys():
         price = prices[ticker]
         signal = signals.get(ticker, "HOLD")
-        
+
         # Форматируем цену с разделителем тысяч
         formatted_price = f"{price:,.2f}".replace(",", " ")
         message += f"• {ticker}: {formatted_price} ₽\n"
         message += f"  Signal: {signal}\n"
-    
+
     return message.strip()
 
 def is_telegram_configured():
@@ -87,14 +86,14 @@ def send_telegram_message(message):
     """Отправляет сообщение в Telegram"""
     if not is_telegram_configured():
         return False
-    
+
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
         "parse_mode": "HTML"
     }
-    
+
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
@@ -127,20 +126,20 @@ def run_daily_analysis():
         # Получаем цены
         print("📊 Получаем актуальные цены...")
         prices = get_last_prices()
-        
+
         # Получаем сигналы
         print("📈 Анализируем торговые сигналы...")
         signals = get_signals()
-        
+
         # Логируем сделки по сигналам
         print("📝 Логируем торговые сигналы...")
         for figi, ticker in FIGIS.items():
             if ticker in prices and ticker in signals:
                 log_signal_trade(ticker, figi, signals[ticker], prices[ticker])
-        
+
         # Формируем сообщение
         message = format_message(prices, signals)
-        
+
         # Отправляем или выводим в консоль
         if is_telegram_configured():
             print("📤 Отправляем сообщение в Telegram...")
@@ -152,23 +151,23 @@ def run_daily_analysis():
         else:
             print("📄 Telegram не настроен. Выводим в консоль:")
             print("\n" + message)
-            
+
     except Exception as e:
         print(f"❌ Критическая ошибка: {e}")
 
-def run_telegram_bot():
+def run_Telegram_bot():
     """Запускает Telegram бота для обработки команд"""
     if not TELEGRAM_TOKEN or TELEGRAM_TOKEN == "PLACEHOLDER":
         print("❌ TELEGRAM_TOKEN не настроен! Бот не может быть запущен.")
         return
-    
+
     bot = telebot.TeleBot(TELEGRAM_TOKEN)
-    
+
     @bot.message_handler(func=lambda message: True)
     def handle_message(msg):
         text = msg.text.strip() if msg.text else ""
         print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username}")
-        
+
         if text.startswith("/log"):
             parts = text.split()
             if len(parts) != 5:
@@ -182,11 +181,14 @@ def run_telegram_bot():
                 return
 
             try:
+                # Импортируем функцию здесь, чтобы избежать проблем с областью видимости
+                from utils.sheets_logger import log_trade
+
                 # Сначала отправляем подтверждение начала обработки
                 bot.reply_to(msg, f"📝 Обрабатываю сделку: {side.upper()} {ticker.upper()} {qty} шт по {price}...")
-                
+
                 print(f"[DEBUG] Вызываем log_trade для {ticker}")
-                
+
                 resp = log_trade(
                     date=datetime.now().date(),
                     ticker=ticker.upper(),
@@ -197,14 +199,14 @@ def run_telegram_bot():
                     fees=0
                 )
                 bot.reply_to(msg, f"✅ записал сделку ({resp})")
-                
+
                 # Дополнительно уведомляем об успехе с деталями
                 bot.reply_to(msg, f"📊 Детали: {ticker.upper()} {side.upper()} {qty}x{price} = {int(qty) * float(price.replace(',', '.')):.2f} ₽")
-                
+
             except Exception as e:
                 error_msg = str(e)
                 bot.reply_to(msg, f"❌ ошибка записи: {error_msg}")
-                
+
                 # Если это ошибка Google Apps Script, даем конкретные рекомендации
                 if "Google Apps Script" in error_msg or "appendRow" in error_msg:
                     bot.reply_to(msg, """
@@ -216,7 +218,7 @@ def run_telegram_bot():
                     """)
                 else:
                     bot.reply_to(msg, f"🔍 Проверьте файл debug_sheets.log для подробностей")
-        
+
         elif text.startswith("/prices"):
             try:
                 prices = get_last_prices()
@@ -227,7 +229,7 @@ def run_telegram_bot():
                 bot.reply_to(msg, message)
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения цен: {e}")
-        
+
         elif text.startswith("/signals"):
             try:
                 signals = get_signals()
@@ -237,7 +239,7 @@ def run_telegram_bot():
                 bot.reply_to(msg, message)
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
-        
+
         elif text.startswith("/debug"):
             try:
                 # Читаем последние 10 строк из лог-файла
@@ -245,7 +247,7 @@ def run_telegram_bot():
                     lines = f.readlines()
                     last_lines = lines[-10:] if len(lines) > 10 else lines
                     log_content = "".join(last_lines)
-                
+
                 if log_content:
                     bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
                 else:
@@ -254,15 +256,15 @@ def run_telegram_bot():
                 bot.reply_to(msg, "📋 Лог-файл не найден")
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
-        
+
         elif text.startswith("/test_sheets"):
             print(f"[DEBUG] Получена команда: '{text}'")
             bot.reply_to(msg, "🔄 Тестирую подключение к Google Sheets...")
-            
+
             try:
                 from utils.sheets_logger import log_trade
                 print("[DEBUG] Импорт utils.sheets_logger успешен")
-                
+
                 result = log_trade(
                     date=datetime.now().date(),
                     ticker="TEST",
@@ -272,28 +274,28 @@ def run_telegram_bot():
                     qty=1,
                     fees=0.1
                 )
-                
+
                 print(f"[DEBUG] Результат теста: {result}")
                 bot.reply_to(msg, f"✅ Тест Google Sheets успешен!\n📝 Ответ: {result[:200]}...")
-                
+
             except Exception as e:
                 print(f"[DEBUG] Ошибка теста: {e}")
                 bot.reply_to(msg, f"❌ Тест Google Sheets не прошел:\n{str(e)[:500]}...")
-        
+
         elif text.startswith("/config"):
             # Показываем конфигурацию (без секретов)
             webhook_url = os.getenv("SHEETS_WEBHOOK_URL", "НЕ НАСТРОЕНО")
             token_status = "НАСТРОЕНО" if os.getenv("SHEETS_TOKEN") else "НЕ НАСТРОЕНО"
-            
+
             config_msg = f"""🔧 Конфигурация Google Sheets:
 
 📡 Webhook URL: {webhook_url[:50]}...
 🔑 Token: {token_status}
 
 💡 Для проверки используйте /test_sheets"""
-            
+
             bot.reply_to(msg, config_msg)
-        
+
         elif text == "/help":
             help_text = """🤖 Доступные команды:
 
@@ -309,20 +311,20 @@ def run_telegram_bot():
 
 Доступные тикеры: YNDX, FXIT"""
             bot.reply_to(msg, help_text)
-        
+
         else:
             bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
-    
+
     print("🤖 Telegram бот запущен...")
     bot.polling(none_stop=True)
 
 def main():
     """Основная функция - выбор режима работы"""
     import sys
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == "bot":
         # Режим Telegram бота
-        run_telegram_bot()
+        run_Telegram_bot()
     else:
         # Режим разового анализа
         run_daily_analysis()
