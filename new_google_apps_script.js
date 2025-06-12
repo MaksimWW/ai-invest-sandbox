@@ -14,8 +14,30 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
+    // Если это просто тест подключения
+    if (data.test === "ping") {
+      console.log('Ping test request received');
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          ok: true, 
+          message: "Webhook is working",
+          timestamp: new Date().toISOString()
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     // Получаем активную таблицу (будет автоматически ваша таблица)
     const sheet = SpreadsheetApp.getActiveSheet();
+    
+    if (!sheet) {
+      console.log('No active sheet found');
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          ok: false, 
+          error: "No active sheet found"
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
     // Если первая строка пустая, добавляем заголовки
     const firstRow = sheet.getRange(1, 1, 1, 8).getValues()[0];
