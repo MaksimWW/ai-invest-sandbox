@@ -252,7 +252,7 @@ def run_telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
         
-        elif text.startswith("/test_sheets"):
+        elif text == "/test_sheets":
             try:
                 from utils.sheets_logger import log_trade
                 result = log_trade(
