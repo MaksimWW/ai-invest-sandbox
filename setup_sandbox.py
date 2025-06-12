@@ -1,7 +1,7 @@
 
 #!/usr/bin/env python
 import os
-from tinkoff.invest import Client, MoneyValue, AccountType
+from tinkoff.invest import Client, MoneyValue
 
 TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
 START_CAPITAL = 100_000  # ₽
@@ -15,9 +15,7 @@ def main():
     
     with Client(TOKEN, sandbox_token=TOKEN, app_name="ai-trader") as client:
         # Открываем песочный аккаунт
-        acc = client.sandbox.open_sandbox_account(
-            account_type=AccountType.ACCOUNT_TYPE_UNSPECIFIED
-        ).account_id
+        acc = client.sandbox.open_sandbox_account().account_id
         print("Sandbox account:", acc)
 
         # Пополняем счёт
