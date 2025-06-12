@@ -42,6 +42,8 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         "token": TOKEN
     }
     
+    print("[DEBUG] send to sheets:", payload)
+    
     try:
         r = requests.post(WEBHOOK, data=payload, timeout=5)
         r.raise_for_status()          # 200 => OK
