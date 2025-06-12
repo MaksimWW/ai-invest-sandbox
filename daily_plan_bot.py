@@ -277,7 +277,21 @@ def run_telegram_bot():
                 
             except Exception as e:
                 print(f"[DEBUG] Ошибка теста: {e}")
-                bot.reply_to(msg, f"❌ Тест Google Sheets не прошел:\n{str(e)[:300]}...")
+                bot.reply_to(msg, f"❌ Тест Google Sheets не прошел:\n{str(e)[:500]}...")
+        
+        elif text.startswith("/config"):
+            # Показываем конфигурацию (без секретов)
+            webhook_url = os.getenv("SHEETS_WEBHOOK_URL", "НЕ НАСТРОЕНО")
+            token_status = "НАСТРОЕНО" if os.getenv("SHEETS_TOKEN") else "НЕ НАСТРОЕНО"
+            
+            config_msg = f"""🔧 Конфигурация Google Sheets:
+
+📡 Webhook URL: {webhook_url[:50]}...
+🔑 Token: {token_status}
+
+💡 Для проверки используйте /test_sheets"""
+            
+            bot.reply_to(msg, config_msg)
         
         elif text == "/help":
             help_text = """🤖 Доступные команды:
@@ -288,6 +302,7 @@ def run_telegram_bot():
 /prices - показать актуальные цены
 /signals - показать торговые сигналы
 /debug - показать лог отладки
+/config - показать конфигурацию Google Sheets
 /test_sheets - проверить подключение к Google Sheets
 /help - показать эту справку
 
