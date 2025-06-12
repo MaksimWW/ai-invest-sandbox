@@ -26,15 +26,20 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
-    // Получаем активную таблицу (будет автоматически ваша таблица)
-    const sheet = SpreadsheetApp.getActiveSheet();
+    // ВАЖНО: Замените на ID вашей таблицы Google Sheets
+    // ID таблицы можно взять из URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+    const SPREADSHEET_ID = "12ku68n4cEz7q3TZjoUMvp1hF3QC3a4XRRg@LIZKVdqje8tTgid"; // Замените на ваш ID!
+    
+    // Получаем конкретную таблицу по ID
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = spreadsheet.getActiveSheet(); // или getSheetByName("Sheet1")
     
     if (!sheet) {
-      console.log('No active sheet found');
+      console.log('No sheet found');
       return ContentService
         .createTextOutput(JSON.stringify({
           ok: false, 
-          error: "No active sheet found"
+          error: "Sheet not found. Check spreadsheet ID and sheet name."
         }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -42,7 +47,7 @@ function doPost(e) {
     // Если первая строка пустая, добавляем заголовки
     const firstRow = sheet.getRange(1, 1, 1, 8).getValues()[0];
     if (firstRow[0] === '') {
-      const headers = ['Дата', 'Тикер', 'FIGI', 'Операция', 'Цена', 'Количество', 'Комиссия', 'Время записи'];
+      const headers = ['date', 'ticker', 'figi', 'side', 'price', 'qty', 'fees', 'pnl'];
       sheet.getRange(1, 1, 1, 8).setValues([headers]);
     }
     
@@ -55,7 +60,7 @@ function doPost(e) {
       parseFloat(data.price) || 0,
       parseInt(data.qty) || 0,
       parseFloat(data.fees) || 0,
-      new Date() // timestamp записи
+      new Date().toISOString() // timestamp записи
     ];
     
     console.log('Adding row:', rowData);
@@ -65,7 +70,8 @@ function doPost(e) {
       .createTextOutput(JSON.stringify({
         ok: true, 
         message: "Trade logged successfully",
-        data: rowData
+        data: rowData,
+        spreadsheet_id: SPREADSHEET_ID
       }))
       .setMimeType(ContentService.MimeType.JSON);
       
@@ -74,7 +80,8 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({
         ok: false, 
-        error: error.toString()
+        error: error.toString(),
+        message: "Проверьте ID таблицы в коде скрипта"
       }))
       .setMimeType(ContentService.MimeType.JSON);
   }
