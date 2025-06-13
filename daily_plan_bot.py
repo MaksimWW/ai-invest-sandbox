@@ -233,22 +233,32 @@ def run_Telegram_bot():
                 bot.reply_to(msg, f"❌ Ошибка получения цен: {e}")
 
         elif text.lower().startswith("/signals"):
+            print(f"[DEBUG] Получена команда /signals: '{text}'")
             parts = text.split()
             try:
                 fast = int(parts[1]) if len(parts) > 1 else 20
                 slow = int(parts[2]) if len(parts) > 2 else 50
                 atr  = float(parts[3]) if len(parts) > 3 else 1.0
-            except (IndexError, ValueError):
+                print(f"[DEBUG] Параметры: fast={fast}, slow={slow}, atr={atr}")
+            except (IndexError, ValueError) as ve:
+                print(f"[DEBUG] Ошибка парсинга параметров: {ve}")
                 bot.reply_to(msg, "Формат: /signals [fast] [slow] [ATR]  (напр. /signals 10 40 1.2)")
                 return
 
             try:
+                print(f"[DEBUG] Начинаю генерацию сигналов...")
                 reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}:\n"
                 for ticker, figi in FIGI_MAP.items():
-                    sig = generate_signal(figi, fast=fast, slow=slow, atr_ratio=atr)
+                    print(f"[DEBUG] Обрабатываю {ticker} (FIGI: {figi})")
+                    sig = generate_signal(figi, interval='hour', fast=fast, slow=slow, atr_ratio=atr)
+                    print(f"[DEBUG] Сигнал для {ticker}: {sig}")
                     reply += f"• {ticker:<6} → {sig}\n"
+                print(f"[DEBUG] Отправляю ответ: {reply}")
                 bot.reply_to(msg, reply)
             except Exception as e:
+                print(f"[DEBUG] Ошибка в генерации сигналов: {e}")
+                import traceback
+                traceback.print_exc()
                 bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
 
         elif text.startswith("/debug"):
