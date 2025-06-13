@@ -232,13 +232,22 @@ def run_Telegram_bot():
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения цен: {e}")
 
-        elif text.startswith("/signals"):
+        elif text.lower().startswith("/signals"):
+            parts = text.split()
             try:
-                signals = get_signals()
-                message = "📊 Торговые сигналы:\n"
-                for ticker, signal in signals.items():
-                    message += f"• {ticker}: {signal}\n"
-                bot.reply_to(msg, message)
+                fast = int(parts[1]) if len(parts) > 1 else 20
+                slow = int(parts[2]) if len(parts) > 2 else 50
+                atr  = float(parts[3]) if len(parts) > 3 else 1.0
+            except (IndexError, ValueError):
+                bot.reply_to(msg, "Формат: /signals [fast] [slow] [ATR]  (напр. /signals 10 40 1.2)")
+                return
+
+            try:
+                reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}:\n"
+                for ticker, figi in FIGI_MAP.items():
+                    sig = generate_signal(figi, fast=fast, slow=slow, atr_ratio=atr)
+                    reply += f"• {ticker:<6} → {sig}\n"
+                bot.reply_to(msg, reply)
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
 
@@ -368,7 +377,10 @@ def run_Telegram_bot():
 Пример: /log BUY YNDX 10 2500.50
 
 /prices - показать актуальные цены
-/signals - показать торговые сигналы
+/signals [fast] [slow] [ATR] - торговые сигналы
+Пример: /signals 10 40 1.2 (SMA10/40, ATR≥1.2)
+По умолчанию: /signals = /signals 20 50 1.0
+
 /pnl - показать общий P/L
 /debug - показать лог отладки
 /config - показать конфигурацию Google Sheets
