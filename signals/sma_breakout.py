@@ -150,3 +150,15 @@ def generate_signal(figi, interval='hour', fast=20, slow=50, atr_ratio=1.0):
     except Exception as e:
         print(f"Ошибка генерации сигнала для {figi}: {e}")
         return "HOLD"
+
+def _debug_last_values(figi, interval="hour", fast=20, slow=50):
+    """
+    Возвращает кортежи (close, sma_fast, sma_slow) для двух последних свечей,
+    чтобы руками проверить факт пересечения.
+    """
+    df = get_candles(figi, interval, slow + 2)          # та же функция, что использует generate_signal
+    sma_fast = df['close'].rolling(fast).mean()
+    sma_slow = df['close'].rolling(slow).mean()
+    return list(zip(df['close'].tail(2),
+                    sma_fast.tail(2),
+                    sma_slow.tail(2)))
