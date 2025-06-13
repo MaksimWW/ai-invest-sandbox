@@ -166,7 +166,8 @@ def run_Telegram_bot():
     @bot.message_handler(func=lambda message: True)
     def handle_message(msg):
         text = msg.text.strip() if msg.text else ""
-        print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username}")
+        # print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username}")
+        # print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username or msg.from_user.first_name}")
 
         if text.startswith("/log"):
             parts = text.split()
@@ -187,7 +188,7 @@ def run_Telegram_bot():
                 # Сначала отправляем подтверждение начала обработки
                 bot.reply_to(msg, f"📝 Обрабатываю сделку: {side.upper()} {ticker.upper()} {qty} шт по {price}...")
 
-                print(f"[DEBUG] Вызываем log_trade для {ticker}")
+                # print(f"[DEBUG] Вызываем log_trade для {ticker}")
 
                 resp = log_trade(
                     date=datetime.now().date(),
@@ -258,12 +259,12 @@ def run_Telegram_bot():
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
 
         elif text.startswith("/test_sheets"):
-            print(f"[DEBUG] Получена команда: '{text}'")
+            # print(f"[DEBUG] Получена команда: '{text}'")
             bot.reply_to(msg, "🔄 Тестирую подключение к Google Sheets...")
 
             try:
                 from utils.sheets_logger import log_trade
-                print("[DEBUG] Импорт utils.sheets_logger успешен")
+                # print("[DEBUG] Импорт utils.sheets_logger успешен")
 
                 result = log_trade(
                     date=datetime.now().date(),
@@ -275,11 +276,11 @@ def run_Telegram_bot():
                     fees=0.1
                 )
 
-                print(f"[DEBUG] Результат теста: {result}")
+                # print(f"[DEBUG] Результат теста: {result}")
                 bot.reply_to(msg, f"✅ Тест Google Sheets успешен!\n📝 Ответ: {result[:200]}...")
 
             except Exception as e:
-                print(f"[DEBUG] Ошибка теста: {e}")
+                # print(f"[DEBUG] Ошибка теста: {e}")
                 bot.reply_to(msg, f"❌ Тест Google Sheets не прошел:\n{str(e)[:500]}...")
 
         elif text.startswith("/config"):
@@ -315,6 +316,7 @@ def run_Telegram_bot():
         elif text.startswith("/pnl"):
              try:
                 from utils.sheets_logger import get_pnl
+                # print(f"[DEBUG] Запрашиваем P/L с URL: {url}")
                 pnl = get_pnl()
 
                 if pnl > 0:

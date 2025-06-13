@@ -27,7 +27,7 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         RuntimeError: Если webhook не настроен
         requests.HTTPError: Если запрос завершился с ошибкой
     """
-    print(f"[DEBUG] log_trade вызвана с параметрами: {ticker}, {side}, {price}, {qty}")
+    # print(f"[DEBUG] log_trade вызвана с параметрами: {ticker}, {side}, {price}, {qty}")
 
     if not WEBHOOK or not TOKEN:
         print("[DEBUG] Ошибка: WEBHOOK или TOKEN не настроены")
@@ -44,7 +44,7 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         "token": TOKEN
     }
 
-    print("[DEBUG] send to sheets:", payload)
+    # print("[DEBUG] send to sheets:", payload)
 
     # Дополнительно логируем в файл для отладки
     import json
@@ -52,14 +52,14 @@ def log_trade(date: dt.date, ticker: str, figi: str,
         f.write(f"[{dt.datetime.now()}] Payload: {json.dumps(payload, ensure_ascii=False)}\n")
 
     try:
-        print(f"[DEBUG] Отправляем POST запрос на {WEBHOOK}")
+        # print(f"[DEBUG] Отправляем POST запрос на {WEBHOOK}")
         r = requests.post(WEBHOOK, data=payload, timeout=10)
-        print(f"[DEBUG] Получен ответ с кодом: {r.status_code}")
+        # print(f"[DEBUG] Получен ответ с кодом: {r.status_code}")
 
         r.raise_for_status()
 
         response_text = r.text
-        print(f"[DEBUG] Ответ от сервера: {response_text[:500]}...")
+        # print(f"[DEBUG] Ответ от сервера: {response_text[:500]}...")
 
         # Логируем ответ
         with open("debug_sheets.log", "a", encoding="utf-8") as f:
