@@ -159,8 +159,8 @@ def _debug_last_values(figi, interval="hour", fast=20, slow=50):
     df = get_candles(figi, interval, slow * 3)          # больше данных для надежного расчета SMA
     sma_fast = df['close'].rolling(fast).mean()
     sma_slow = df['close'].rolling(slow).mean()
-    sma_fast = sma_fast.dropna()
-    sma_slow = sma_slow.dropna()
+    sma_fast = sma_fast.fillna(method='bfill')
+    sma_slow = sma_slow.fillna(method='bfill')
     df = df.iloc[-len(sma_slow):]      # синхронизируем длины
     return list(zip(df['close'].tail(2),
                     sma_fast.tail(2),
