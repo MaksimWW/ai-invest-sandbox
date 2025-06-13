@@ -15,16 +15,28 @@ def get_candles(figi, interval='hour', count=200):
     # Определяем интервал для API
     interval_map = {
         'minute': CandleInterval.CANDLE_INTERVAL_1_MIN,
+        '1min': CandleInterval.CANDLE_INTERVAL_1_MIN,
+        '5min': CandleInterval.CANDLE_INTERVAL_5_MIN,
+        '15min': CandleInterval.CANDLE_INTERVAL_15_MIN,
+        '30min': CandleInterval.CANDLE_INTERVAL_30_MIN,
         'hour': CandleInterval.CANDLE_INTERVAL_HOUR,
         'day': CandleInterval.CANDLE_INTERVAL_DAY
     }
 
-    api_interval = interval_map.get(interval, CandleInterval.CANDLE_INTERVAL_HOUR)
+    api_interval = interval_map.get(interval)
+    if api_interval is None:
+        raise ValueError(f"Неподдерживаемый интервал: {interval}. Доступные: {list(interval_map.keys())}")
 
     # Рассчитываем временной диапазон
     end_time = datetime.now()
-    if interval == 'minute':
+    if interval in ['minute', '1min']:
         start_time = end_time - timedelta(minutes=count)
+    elif interval == '5min':
+        start_time = end_time - timedelta(minutes=count * 5)
+    elif interval == '15min':
+        start_time = end_time - timedelta(minutes=count * 15)
+    elif interval == '30min':
+        start_time = end_time - timedelta(minutes=count * 30)
     elif interval == 'hour':
         start_time = end_time - timedelta(hours=count)
     else:  # day
@@ -55,7 +67,19 @@ def get_candles(figi, interval='hour', count=200):
             return df
 
         except Exception as e:
-            print(f"Ошибка получения свечей для {figi}: {e}")
+            error_msg = str(e)
+            if "30014" in error_msg and "maximum request period" in error_msg:
+                # Уменьшаем период запроса для данного интервала
+                if interval == '15min' and count > 50:
+                    print(f"Слишком большой период для {interval}. Повторяем с меньшим количеством свечей...")
+                    return get_candles(figi, interval, 50)
+                elif interval in ['5min', '1min'] and count > 100:
+                    print(f"Слишком большой период для {interval}. Повторяем с меньшим количеством свечей...")
+                    return get_candles(figi, interval, 100)
+                else:
+                    print(f"Ошибка периода запроса для {figi} ({interval}): API не поддерживает запрос такого количества свечей")
+            else:
+                print(f"Ошибка получения свечей для {figi}: {e}")
             return pd.DataFrame()
 
 def calculate_sma(df, period):

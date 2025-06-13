@@ -249,7 +249,8 @@ def run_Telegram_bot():
             except (ValueError, IndexError):
                 bot.reply_to(msg,
                     "Формат: /signals FAST SLOW ATR [INTERVAL] [TICKER...]\n"
-                    "Пример: /signals 5 15 0 15min GAZP LKOH")
+                    "Пример: /signals 5 15 0.5 15min GAZP LKOH\n"
+                    "Интервалы: 1min, 5min, 15min, 30min, hour, day")
                 return
 
             reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}, {interval}:\n"
@@ -317,7 +318,8 @@ def run_Telegram_bot():
 
 /prices - показать актуальные цены
 /signals [fast] [slow] [ATR] [interval] [ticker...] - торговые сигналы
-Пример: /signals 10 40 1.2 hour YNDX FXIT
+Пример: /signals 10 40 1.2 15min YNDX FXIT
+Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
 /pnl - показать общий P/L
