@@ -153,15 +153,16 @@ def generate_signal(figi, interval='hour', fast=20, slow=50, atr_ratio=1.0):
 
 def _debug_last_values(figi, interval="hour", fast=20, slow=50):
     """
-    Возвращает кортежи (close, sma_fast, sma_slow) для двух последних свечей,
-    чтобы руками проверить факт пересечения.
+    Только для отладки. Возвращает два последних набора:
+    (close, sma_fast, sma_slow)
     """
-    df = get_candles(figi, interval, slow * 3)          # больше данных для надежного расчета SMA
+    df = get_candles(figi, interval, slow * 3)        # большой запас свечей
     sma_fast = df['close'].rolling(fast).mean()
     sma_slow = df['close'].rolling(slow).mean()
-    sma_fast = sma_fast.fillna(method='bfill')
-    sma_slow = sma_slow.fillna(method='bfill')
-    df = df.iloc[-len(sma_slow):]      # синхронизируем длины
-    return list(zip(df['close'].tail(2),
-                    sma_fast.tail(2),
-                    sma_slow.tail(2)))
+    # не трогаем основную логику generate_signal!
+    sma_fast = sma_fast.dropna()
+    sma_slow = sma_slow.dropna()
+    tail_len = min(len(sma_fast), len(sma_slow), 2)
+    return list(zip(df['close'].tail(tail_len),
+                    sma_fast.tail(tail_len),
+                    sma_slow.tail(tail_len)))
