@@ -236,23 +236,30 @@ def run_Telegram_bot():
             print(f"[DEBUG] Получена команда /signals: '{text}'")
             parts = text.split()
             try:
+                # Парсим параметры: /signals FAST SLOW ATR INTERVAL TICKER
                 fast = int(parts[1]) if len(parts) > 1 else 20
                 slow = int(parts[2]) if len(parts) > 2 else 50
                 atr  = float(parts[3]) if len(parts) > 3 else 1.0
-                print(f"[DEBUG] Параметры: fast={fast}, slow={slow}, atr={atr}")
+                interval = parts[4] if len(parts) > 4 else "hour"
+                tickers = [parts[5].upper()] if len(parts) > 5 else list(FIGI_MAP.keys())
+                print(f"[DEBUG] Параметры: fast={fast}, slow={slow}, atr={atr}, interval={interval}, tickers={tickers}")
             except (IndexError, ValueError) as ve:
                 print(f"[DEBUG] Ошибка парсинга параметров: {ve}")
-                bot.reply_to(msg, "Формат: /signals [fast] [slow] [ATR]  (напр. /signals 10 40 1.2)")
+                bot.reply_to(msg, "Формат: /signals [fast] [slow] [ATR] [interval] [ticker]\nПример: /signals 10 40 1.2 hour YNDX")
                 return
 
             try:
                 print(f"[DEBUG] Начинаю генерацию сигналов...")
-                reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}:\n"
-                for ticker, figi in FIGI_MAP.items():
-                    print(f"[DEBUG] Обрабатываю {ticker} (FIGI: {figi})")
-                    sig = generate_signal(figi, interval='hour', fast=fast, slow=slow, atr_ratio=atr)
-                    print(f"[DEBUG] Сигнал для {ticker}: {sig}")
-                    reply += f"• {ticker:<6} → {sig}\n"
+                reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}, {interval}:\n"
+                for tk in tickers:
+                    figi = FIGI_MAP.get(tk)
+                    if not figi:
+                        reply += f"• {tk:<6} → UNKNOWN_TICKER\n"
+                        continue
+                    print(f"[DEBUG] Обрабатываю {tk} (FIGI: {figi})")
+                    sig = generate_signal(figi, interval=interval, fast=fast, slow=slow, atr_ratio=atr)
+                    print(f"[DEBUG] Сигнал для {tk}: {sig}")
+                    reply += f"• {tk:<6} → {sig}\n"
                 print(f"[DEBUG] Отправляю ответ: {reply}")
                 bot.reply_to(msg, reply)
             except Exception as e:
@@ -387,9 +394,9 @@ def run_Telegram_bot():
 Пример: /log BUY YNDX 10 2500.50
 
 /prices - показать актуальные цены
-/signals [fast] [slow] [ATR] - торговые сигналы
-Пример: /signals 10 40 1.2 (SMA10/40, ATR≥1.2)
-По умолчанию: /signals = /signals 20 50 1.0
+/signals [fast] [slow] [ATR] [interval] [ticker] - торговые сигналы
+Пример: /signals 10 40 1.2 hour YNDX
+По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
 /pnl - показать общий P/L
 /debug - показать лог отладки
