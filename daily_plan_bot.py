@@ -233,40 +233,34 @@ def run_Telegram_bot():
                 bot.reply_to(msg, f"❌ Ошибка получения цен: {e}")
 
         elif text.lower().startswith("/signals"):
-            print(f"[DEBUG] Получена команда /signals: '{text}'")
             parts = text.split()
             try:
-                # Парсим параметры: /signals FAST SLOW ATR INTERVAL TICKER
                 fast = int(parts[1]) if len(parts) > 1 else 20
                 slow = int(parts[2]) if len(parts) > 2 else 50
                 atr  = float(parts[3]) if len(parts) > 3 else 1.0
                 interval = parts[4] if len(parts) > 4 else "hour"
-                tickers = [parts[5].upper()] if len(parts) > 5 else list(FIGI_MAP.keys())
-                print(f"[DEBUG] Параметры: fast={fast}, slow={slow}, atr={atr}, interval={interval}, tickers={tickers}")
-            except (IndexError, ValueError) as ve:
-                print(f"[DEBUG] Ошибка парсинга параметров: {ve}")
-                bot.reply_to(msg, "Формат: /signals [fast] [slow] [ATR] [interval] [ticker]\nПример: /signals 10 40 1.2 hour YNDX")
+                # если указаны тикеры → берём их, иначе все из FIGI_MAP
+                tickers = [t.upper() for t in parts[5:]] if len(parts) > 5 else FIGI_MAP.keys()
+            except (ValueError, IndexError):
+                bot.reply_to(msg,
+                    "Формат: /signals FAST SLOW ATR [INTERVAL] [TICKER...]\n"
+                    "Пример: /signals 5 15 0 15min GAZP LKOH")
                 return
 
-            try:
-                print(f"[DEBUG] Начинаю генерацию сигналов...")
-                reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}, {interval}:\n"
-                for tk in tickers:
-                    figi = FIGI_MAP.get(tk)
-                    if not figi:
-                        reply += f"• {tk:<6} → UNKNOWN_TICKER\n"
-                        continue
-                    print(f"[DEBUG] Обрабатываю {tk} (FIGI: {figi})")
-                    sig = generate_signal(figi, interval=interval, fast=fast, slow=slow, atr_ratio=atr)
-                    print(f"[DEBUG] Сигнал для {tk}: {sig}")
-                    reply += f"• {tk:<6} → {sig}\n"
-                print(f"[DEBUG] Отправляю ответ: {reply}")
-                bot.reply_to(msg, reply)
-            except Exception as e:
-                print(f"[DEBUG] Ошибка в генерации сигналов: {e}")
-                import traceback
-                traceback.print_exc()
-                bot.reply_to(msg, f"❌ Ошибка получения сигналов: {e}")
+            reply = f"📊 Сигналы SMA{fast}/{slow}, ATR≥{atr}, {interval}:\n"
+            for tk in tickers:
+                figi = FIGI_MAP.get(tk)
+                if not figi:
+                    reply += f"• {tk:<6} → 🚫 нет FIGI\n"
+                    continue
+                sig = generate_signal(figi,
+                                      interval=interval,
+                                      fast=fast,
+                                      slow=slow,
+                                      atr_ratio=atr)
+                reply += f"• {tk:<6} → {sig}\n"
+            bot.reply_to(msg, reply)
+            return
 
         elif text.startswith("/debug"):
             try:
@@ -394,8 +388,8 @@ def run_Telegram_bot():
 Пример: /log BUY YNDX 10 2500.50
 
 /prices - показать актуальные цены
-/signals [fast] [slow] [ATR] [interval] [ticker] - торговые сигналы
-Пример: /signals 10 40 1.2 hour YNDX
+/signals [fast] [slow] [ATR] [interval] [ticker...] - торговые сигналы
+Пример: /signals 10 40 1.2 hour YNDX FXIT
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
 /pnl - показать общий P/L
