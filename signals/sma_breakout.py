@@ -156,7 +156,7 @@ def _debug_last_values(figi, interval="hour", fast=20, slow=50):
     Возвращает кортежи (close, sma_fast, sma_slow) для двух последних свечей,
     чтобы руками проверить факт пересечения.
     """
-    df = get_candles(figi, interval, slow + 2)          # та же функция, что использует generate_signal
+    df = get_candles(figi, interval, slow * 3)          # больше данных для надежного расчета SMA
     sma_fast = df['close'].rolling(fast).mean()
     sma_slow = df['close'].rolling(slow).mean()
     return list(zip(df['close'].tail(2),
