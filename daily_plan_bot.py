@@ -173,7 +173,7 @@ def run_Telegram_bot():
     def handle_message(msg):
         text = msg.text.strip() if msg.text else ""
         # print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username}")
-        # print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.username or msg.from_user.first_name}")
+        # print(f"[DEBUG] Получено сообщение: '{text}' от пользователя {msg.from_user.first_name}")
 
         if text.startswith("/log"):
             parts = text.split()
@@ -258,31 +258,17 @@ def run_Telegram_bot():
                 if not figi:
                     reply += f"• {tk:<6} → 🚫 нет FIGI\n"
                     continue
-                sig = generate_signal(figi,
-                                      interval=interval,
-                                      fast=fast,
-                                      slow=slow,
-                                      atr_ratio=atr)
-                reply += f"• {tk:<6} → {sig}\n"
+                try:
+                    sig = generate_signal(figi,
+                                          interval=interval,
+                                          fast=fast,
+                                          slow=slow,
+                                          atr_ratio=atr)
+                    reply += f"• {tk:<6} → {sig}\n"
+                except Exception as e:
+                    reply += f"• {tk:<6} → ⚠️ Ошибка: {e}\n"
             bot.reply_to(msg, reply)
             return
-
-        elif text.startswith("/debug"):
-            try:
-                # Читаем последние 10 строк из лог-файла
-                with open("debug_sheets.log", "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    last_lines = lines[-10:] if len(lines) > 10 else lines
-                    log_content = "".join(last_lines)
-
-                if log_content:
-                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
-                else:
-                    bot.reply_to(msg, "📋 Лог-файл пуст")
-            except FileNotFoundError:
-                bot.reply_to(msg, "📋 Лог-файл не найден")
-            except Exception as e:
-                bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
 
         elif text.startswith("/test_sheets"):
             # print(f"[DEBUG] Получена команда: '{text}'")
@@ -330,7 +316,11 @@ def run_Telegram_bot():
 Пример: /log BUY YNDX 10 2500.50
 
 /prices - показать актуальные цены
-/signals - показать торговые сигналы
+/signals [fast] [slow] [ATR] [interval] [ticker...] - торговые сигналы
+Пример: /signals 10 40 1.2 hour YNDX FXIT
+По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
+
+/pnl - показать общий P/L
 /debug - показать лог отладки
 /config - показать конфигурацию Google Sheets
 /test_sheets - проверить подключение к Google Sheets
@@ -385,26 +375,6 @@ def run_Telegram_bot():
                 bot.reply_to(msg, "📋 Лог-файл не найден")
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
-
-        elif text == "/help":
-            help_text = """🤖 Доступные команды:
-
-/log BUY|SELL TICKER QTY PRICE - записать сделку
-Пример: /log BUY YNDX 10 2500.50
-
-/prices - показать актуальные цены
-/signals [fast] [slow] [ATR] [interval] [ticker...] - торговые сигналы
-Пример: /signals 10 40 1.2 hour YNDX FXIT
-По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
-
-/pnl - показать общий P/L
-/debug - показать лог отладки
-/config - показать конфигурацию Google Sheets
-/test_sheets - проверить подключение к Google Sheets
-/help - показать эту справку
-
-Доступные тикеры: YNDX, FXIT"""
-            bot.reply_to(msg, help_text)
 
         else:
             bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
