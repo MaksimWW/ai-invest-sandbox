@@ -52,7 +52,8 @@ def get_signals():
 
     for figi, ticker in FIGIS.items():
         try:
-            signal = generate_signal(figi, 'hour')
+            # Используем настройки по умолчанию: SMA20/50, ATR фильтр 1.0
+            signal = generate_signal(figi, 'hour', fast=20, slow=50, atr_ratio=1.0)
             signals[ticker] = signal
         except Exception as e:
             print(f"❌ Ошибка получения сигнала для {ticker}: {e}")

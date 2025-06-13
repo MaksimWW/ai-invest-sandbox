@@ -65,25 +65,51 @@ def calculate_sma(df, period):
         return pd.Series([None] * len(df))
     return df['close'].rolling(window=period).mean()
 
-def generate_signal(figi, interval='hour'):
+def calculate_atr(df, period=14):
+    """Вычисляет Average True Range (ATR)"""
+    if len(df) < 2:
+        return pd.Series([None] * len(df))
+    
+    # Для ATR нужны high, low, close. Используем close как приближение
+    # В реальной реализации нужны данные OHLC
+    df['prev_close'] = df['close'].shift(1)
+    df['tr'] = df['close'] - df['prev_close']  # Упрощенная версия TR
+    df['tr'] = df['tr'].abs()  # Берем абсолютное значение
+    
+    # Вычисляем ATR как SMA от True Range
+    atr = df['tr'].rolling(window=period).mean()
+    return atr
+
+def generate_signal(figi, interval='hour', fast=20, slow=50, atr_ratio=1.0):
     """
-    Генерирует сигнал на основе пересечения SMA20 и SMA50
+    Генерирует сигнал на основе пересечения SMA и фильтра волатильности ATR
+    
+    Args:
+        figi: FIGI инструмента
+        interval: Интервал свечей ('hour', 'day', 'minute')
+        fast: Период быстрой SMA (по умолчанию 20)
+        slow: Период медленной SMA (по умолчанию 50)
+        atr_ratio: Минимальный коэффициент ATR для срабатывания сигнала
     
     Returns:
-        str: 'BUY' если SMA20 пересекла SMA50 снизу вверх на последней свече
-             'SELL' если SMA20 пересекла SMA50 сверху вниз на последней свече
+        str: 'BUY' если SMA_fast пересекла SMA_slow снизу вверх + ATR фильтр
+             'SELL' если SMA_fast пересекла SMA_slow сверху вниз + ATR фильтр
              'HOLD' в остальных случаях
     """
     try:
         # Получаем свечи
         df = get_candles(figi, interval, 200)
         
-        if len(df) < 50:
+        if len(df) < slow:
             return "HOLD"  # Недостаточно данных
         
         # Вычисляем SMA
-        df['sma20'] = calculate_sma(df, 20)
-        df['sma50'] = calculate_sma(df, 50)
+        df[f'sma{fast}'] = calculate_sma(df, fast)
+        df[f'sma{slow}'] = calculate_sma(df, slow)
+        
+        # Вычисляем ATR
+        df['atr'] = calculate_atr(df, slow)
+        df['avg_atr'] = df['atr'].rolling(window=slow).mean()
         
         # Удаляем строки с NaN значениями
         df = df.dropna()
@@ -96,20 +122,31 @@ def generate_signal(figi, interval='hour'):
         prev_idx = last_idx - 1
         
         # Текущие значения SMA
-        current_sma20 = df.iloc[last_idx]['sma20']
-        current_sma50 = df.iloc[last_idx]['sma50']
+        current_sma_fast = df.iloc[last_idx][f'sma{fast}']
+        current_sma_slow = df.iloc[last_idx][f'sma{slow}']
         
         # Предыдущие значения SMA
-        prev_sma20 = df.iloc[prev_idx]['sma20']
-        prev_sma50 = df.iloc[prev_idx]['sma50']
+        prev_sma_fast = df.iloc[prev_idx][f'sma{fast}']
+        prev_sma_slow = df.iloc[prev_idx][f'sma{slow}']
         
-        # Проверяем пересечения
-        if prev_sma20 <= prev_sma50 and current_sma20 > current_sma50:
-            return "BUY"  # Пересечение снизу вверх
-        elif prev_sma20 >= prev_sma50 and current_sma20 < current_sma50:
-            return "SELL"  # Пересечение сверху вниз
+        # Проверяем ATR фильтр
+        current_atr = df.iloc[last_idx]['atr']
+        avg_atr = df.iloc[last_idx]['avg_atr']
+        
+        # ATR фильтр: текущая волатильность должна быть достаточной
+        atr_filter_passed = (current_atr >= atr_ratio * avg_atr) if avg_atr > 0 else True
+        
+        # Проверяем пересечения с учетом ATR фильтра
+        if (prev_sma_fast <= prev_sma_slow and 
+            current_sma_fast > current_sma_slow and 
+            atr_filter_passed):
+            return "BUY"  # Пересечение снизу вверх + достаточная волатильность
+        elif (prev_sma_fast >= prev_sma_slow and 
+              current_sma_fast < current_sma_slow and 
+              atr_filter_passed):
+            return "SELL"  # Пересечение сверху вниз + достаточная волатильность
         else:
-            return "HOLD"  # Нет пересечения
+            return "HOLD"  # Нет пересечения или недостаточная волатильность
             
     except Exception as e:
         print(f"Ошибка генерации сигнала для {figi}: {e}")
