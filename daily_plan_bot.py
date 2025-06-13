@@ -312,6 +312,69 @@ def run_Telegram_bot():
 Доступные тикеры: YNDX, FXIT"""
             bot.reply_to(msg, help_text)
 
+        elif text.startswith("/pnl"):
+             try:
+                from utils.sheets_logger import get_pnl
+                pnl = get_pnl()
+
+                if pnl > 0:
+                    emoji = "🟢"
+                    status = "Прибыль"
+                elif pnl < 0:
+                    emoji = "🔴" 
+                    status = "Убыток"
+                else:
+                    emoji = "🟡"
+                    status = "В ноль"
+
+                pnl_message = f"""
+💰 Текущий P/L
+
+{emoji} {status}: {pnl:,.2f} ₽
+
+📊 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}
+                """.strip()
+
+                bot.reply_to(msg, pnl_message)
+
+             except Exception as e:
+                error_message = f"❌ Ошибка получения P/L: {e}"
+                bot.reply_to(msg, error_message)
+
+        elif text.startswith("/debug"):
+            try:
+                # Читаем последние 10 строк из лог-файла
+                with open("debug_sheets.log", "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    last_lines = lines[-10:] if len(lines) > 10 else lines
+                    log_content = "".join(last_lines)
+
+                if log_content:
+                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
+                else:
+                    bot.reply_to(msg, "📋 Лог-файл пуст")
+            except FileNotFoundError:
+                bot.reply_to(msg, "📋 Лог-файл не найден")
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
+
+        elif text == "/help":
+            help_text = """🤖 Доступные команды:
+
+/log BUY|SELL TICKER QTY PRICE - записать сделку
+Пример: /log BUY YNDX 10 2500.50
+
+/prices - показать актуальные цены
+/signals - показать торговые сигналы
+/pnl - показать общий P/L
+/debug - показать лог отладки
+/config - показать конфигурацию Google Sheets
+/test_sheets - проверить подключение к Google Sheets
+/help - показать эту справку
+
+Доступные тикеры: YNDX, FXIT"""
+            bot.reply_to(msg, help_text)
+
         else:
             bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
 
@@ -331,3 +394,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```\n{log_content}\n
