@@ -19,7 +19,12 @@ FIGIS = {
 }
 
 # Обратная карта для поиска FIGI по тикеру
-FIGI_MAP = {ticker: figi for figi, ticker in FIGIS.items()}
+FIGI_MAP = {
+    "YNDX": "BBG004730N88",
+    "FXIT": "BBG00Y91R9T3",
+    "GAZP": "BBG004730RP0",
+    "LKOH": "BBG004730ZJ9",
+}
 
 def get_last_prices():
     """Получает последние цены акций через Tinkoff Sandbox API"""
