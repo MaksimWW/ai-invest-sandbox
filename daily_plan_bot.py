@@ -6,6 +6,7 @@ from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
 from utils.sheets_logger import log_trade
+from nlp.ru_sentiment import latest_news, classify
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -108,6 +109,17 @@ def send_telegram_message(message):
     except Exception as e:
         print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
+
+def get_sentiment_score(ticker: str) -> int:
+    """Анализирует настроение новостей по тикеру"""
+    texts = latest_news(ticker)
+    if not texts:
+        return 0
+    votes = sum(1 if classify(t) == "positive"
+                else -1 if classify(t) == "negative"
+                else 0
+                for t in texts)
+    return max(-1, min(1, votes))   # нормализуем к −1..+1
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
     """Упрощенная функция для логирования сделок по сигналам бота"""
@@ -335,6 +347,9 @@ def run_Telegram_bot():
 Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
+/ideas [fast] [slow] [ATR] - композитные идеи (теханализ + новости)
+Пример: /ideas 5 15 0.5
+
 /pnl - показать общий P/L
 /debug - показать лог отладки
 /config - показать конфигурацию Google Sheets
@@ -374,6 +389,28 @@ def run_Telegram_bot():
                 error_message = f"❌ Ошибка получения P/L: {e}"
                 bot.reply_to(msg, error_message)
 
+        elif text.lower().startswith("/ideas"):
+            parts = text.split()
+            fast, slow, atr = 5, 15, 0     # дефолт
+            if len(parts) >= 4:
+                fast, slow, atr = map(float, parts[1:4])
+            reply = f"💡 Композит-идеи SMA{int(fast)}/{int(slow)} ATR≥{atr}:\n"
+            for tk, fg in FIGI_MAP.items():
+                try:
+                    signal = generate_signal(fg, fast=int(fast), slow=int(slow), atr_ratio=atr)
+                    tech = 1 if signal == "BUY" else -1 if signal == "SELL" else 0
+                    sent = get_sentiment_score(tk)
+                    score = tech + sent
+                    if abs(score) >= 2:
+                        side = "LONG" if score > 0 else "SHORT"
+                        reply += f"• {tk:<6} {side} (score {score})\n"
+                except Exception as e:
+                    reply += f"• {tk:<6} ⚠️ Ошибка: {e}\n"
+            if reply.strip().endswith(":"):
+                reply += "Нет сильных идей сейчас."
+            bot.reply_to(msg, reply)
+            return
+
         elif text.startswith("/debug"):
             try:
                 # Читаем последние 10 строк из лог-файла
@@ -385,7 +422,7 @@ def run_Telegram_bot():
                 if log_content:
                     bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
                 else:
-                    bot.reply_to(msg, "📋 Лог-файл пуст")
+                    bot.reply_to(msg, "📋 Лог-файл пуст"
             except FileNotFoundError:
                 bot.reply_to(msg, "📋 Лог-файл не найден")
             except Exception as e:
