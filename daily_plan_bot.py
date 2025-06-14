@@ -422,7 +422,7 @@ def run_Telegram_bot():
                 if log_content:
                     bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
                 else:
-                    bot.reply_to(msg, "📋 Лог-файл пуст"
+                    bot.reply_to(msg, "📋 Лог-файл пуст")
             except FileNotFoundError:
                 bot.reply_to(msg, "📋 Лог-файл не найден")
             except Exception as e:
