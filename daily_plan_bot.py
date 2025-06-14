@@ -24,6 +24,7 @@ FIGI_MAP = {
     "FXIT": "BBG00Y91R9T3",
     "GAZP": "BBG004730RP0",
     "LKOH": "BBG004730ZJ9",
+    "SBER": "BBG0047315Y7",   # Сбербанк
 }
 
 def get_last_prices():
