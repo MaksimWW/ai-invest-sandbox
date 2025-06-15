@@ -9,3 +9,5 @@ pytelegrambotapi
 python-dotenv
 transformers>=4.40
 torch>=2.3
+torch
+transformers
