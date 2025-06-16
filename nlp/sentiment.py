@@ -4,6 +4,10 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch, requests, datetime as dt
 from news_feed import fetch_news
 from langdetect import detect
+import warnings
+
+# Подавляем предупреждения о неиспользуемых весах модели
+warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
 # Используем рабочие модели
 RU_MODEL_NAME = "blanchefort/rubert-base-cased-sentiment"
