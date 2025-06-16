@@ -22,38 +22,47 @@ def _newsapi_query(q, from_dt):
     return [a["title"] for a in r.json().get("articles", [])]
 
 def _gdelt_query(q, from_dt):
-    # GDELT 2.0 Events API Verbatim
+    # GDELT 2.0 Events API с альтернативными endpoints
     since = int(from_dt.timestamp())
-    url = ("https://api.gdeltproject.org/api/v2/doc/docsearch"
-           f"?query={q}&filter=SourceCommonName:english&maxrecords=100"
-           f"&format=json&mode=ArtList&filter=PublishDate>{since}")
-
-    # Попытаемся подключиться 3 раза с увеличивающимися паузами
-    for attempt in range(3):
-        try:
-            print(f"🔄 GDELT попытка {attempt + 1}/3...")
-            r = requests.get(url, timeout=20)
-            r.raise_for_status()
-            
-            data = r.json()
-            articles = data.get("artList", [])
-            print(f"✅ GDELT: найдено {len(articles)} новостей")
-            return [item["title"] for item in articles]
-            
-        except requests.exceptions.Timeout:
-            print(f"⏰ GDELT таймаут на попытке {attempt + 1}")
-        except requests.exceptions.ConnectionError:
-            print(f"🌐 GDELT проблема соединения на попытке {attempt + 1}")
-        except Exception as e:
-            print(f"❌ GDELT ошибка на попытке {attempt + 1}: {type(e).__name__}")
-            
-        if attempt < 2:  # Не последняя попытка
-            import time
-            sleep_time = (attempt + 1) * 3  # 3, 6 секунд
-            print(f"⏳ Пауза {sleep_time} сек перед повтором...")
-            time.sleep(sleep_time)
     
-    print("❌ GDELT недоступен, продолжаем без него")
+    # Список альтернативных endpoints
+    endpoints = [
+        f"https://api.gdeltproject.org/api/v2/doc/docsearch?query={q}&filter=SourceCommonName:english&maxrecords=100&format=json&mode=ArtList&filter=PublishDate>{since}",
+        f"https://api.gdeltproject.org/api/v2/doc/docsearchsearch?query={q}&filter=SourceCommonName:english&maxrecords=100&format=json&mode=ArtList&filter=PublishDate>{since}"
+    ]
+    
+    for endpoint_idx, url in enumerate(endpoints, 1):
+        endpoint_name = "docsearch" if "docsearch?" in url else "docsearchsearch"
+        print(f"🌐 Пробуем GDELT endpoint #{endpoint_idx} ({endpoint_name})...")
+        
+        # Попытаемся подключиться 2 раза для каждого endpoint
+        for attempt in range(2):
+            try:
+                print(f"🔄 {endpoint_name} попытка {attempt + 1}/2...")
+                r = requests.get(url, timeout=15)
+                r.raise_for_status()
+                
+                data = r.json()
+                articles = data.get("artList", [])
+                print(f"✅ GDELT ({endpoint_name}): найдено {len(articles)} новостей")
+                return [item["title"] for item in articles]
+                
+            except requests.exceptions.Timeout:
+                print(f"⏰ {endpoint_name} таймаут на попытке {attempt + 1}")
+            except requests.exceptions.ConnectionError:
+                print(f"🌐 {endpoint_name} проблема соединения на попытке {attempt + 1}")
+            except Exception as e:
+                print(f"❌ {endpoint_name} ошибка на попытке {attempt + 1}: {type(e).__name__}")
+                
+            if attempt < 1:  # Не последняя попытка для этого endpoint
+                import time
+                sleep_time = 2
+                print(f"⏳ Пауза {sleep_time} сек перед повтором...")
+                time.sleep(sleep_time)
+        
+        print(f"❌ GDELT endpoint {endpoint_name} недоступен")
+    
+    print("❌ Все GDELT endpoints недоступны, продолжаем без него")
     return []
 
 def fetch_news(ticker: str, hours: int = 24) -> list[str]:
