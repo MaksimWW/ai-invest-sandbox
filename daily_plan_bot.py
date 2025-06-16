@@ -6,8 +6,6 @@ from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
 from utils.sheets_logger import log_trade
-from nlp.sentiment import latest_news_ru, classify_multi
-from news_feed import fetch_news
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -115,39 +113,42 @@ def send_telegram_message(message):
 
 def get_sentiment_score(ticker: str, hours: int = 24) -> int:
     """Анализирует настроение новостей по тикеру (русские + английские)"""
+    from nlp.sentiment import latest_news_ru, classify_multi
+    from news_feed import fetch_news
+
     # Определяем тип тикера
     russian_tickers = {"YNDX", "FXIT", "GAZP", "LKOH", "SBER", "NVTK"}
     american_tickers = {"NVDA", "AMD", "AAPL", "TSLA", "GOOGL", "MSFT", "META"}
-    
+
     all_texts = []
-    
+
     if ticker in russian_tickers:
         # Для русских тикеров используем русские источники
         print(f"🇷🇺 Ищем русские новости для {ticker} за {hours}ч...")
         ru_texts = latest_news_ru(ticker, hours=hours)
         all_texts.extend(ru_texts)
         print(f"📰 Русские новости для {ticker}: {len(ru_texts)}")
-        
+
     elif ticker in american_tickers:
         # Для американских тикеров используем английские источники
         print(f"🇺🇸 Ищем англоязычные новости для {ticker} за {hours}ч...")
         en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(en_texts)
         print(f"📰 Англоязычные новости для {ticker}: {len(en_texts)}")
-        
+
     else:
         # Для неизвестных тикеров пробуем оба источника
-        print(f"🌍 Ищем новости для неизвестного тикера {ticker} за {hours}ч в обоих источниках...")
+        print(f"🌍 Ищем новости для неизвестного тикера {ticker}...")
         ru_texts = latest_news_ru(ticker, hours=hours)
         en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(ru_texts)
         all_texts.extend(en_texts)
-        print(f"📰 Новости для {ticker}: русских {len(ru_texts)}, английских {len(en_texts)}")
-    
+        print(f"📰 Найдено новостей: {len(all_texts)}")
+
     if not all_texts:
         print(f"❌ Новости для {ticker} не найдены за {hours}ч")
         return 0
-    
+
     votes = sum(1 if classify_multi(t) == "positive"
                 else -1 if classify_multi(t) == "negative"
                 else 0
@@ -432,10 +433,10 @@ def run_Telegram_bot():
                 fast = int(parts[1]) if len(parts) > 1 else 5
                 slow = int(parts[2]) if len(parts) > 2 else 15
                 atr = float(parts[3]) if len(parts) > 3 else 0
-                
+
                 # 4-й аргумент (hours) – за сколько часов брать новости
                 hours = int(parts[4]) if len(parts) > 4 else 24
-                
+
                 # всё, что после hours – список тикеров
                 tickers = [t.upper() for t in parts[5:]] if len(parts) > 5 else list(FIGI_MAP.keys())
             except (ValueError, IndexError):
@@ -444,15 +445,15 @@ def run_Telegram_bot():
                     "Пример: /ideas 5 15 0.5 6 NVDA AMD  (новости за 6 часов)\n"
                     "По умолчанию: /ideas 5 15 0 24 (все тикеры, новости за 24ч)")
                 return
-                
+
             reply = f"💡 Композит-идеи SMA{fast}/{slow} ATR≥{atr} новости≤{hours}ч:\n"
-            
+
             for tk in tickers:
                 fg = FIGI_MAP.get(tk)
                 if not fg:
                     reply += f"• {tk:<6} → 🚫 нет FIGI\n"
                     continue
-                    
+
                 try:
                     signal = generate_signal(fg, fast=fast, slow=slow, atr_ratio=atr)
                     tech = 1 if signal == "BUY" else -1 if signal == "SELL" else 0
@@ -463,7 +464,7 @@ def run_Telegram_bot():
                         reply += f"• {tk:<6} {side} (score {score})\n"
                 except Exception as e:
                     reply += f"• {tk:<6} ⚠️ Ошибка: {e}\n"
-                    
+
             if reply.strip().endswith(":"):
                 reply += "Нет сильных идей сейчас."
             bot.reply_to(msg, reply)
@@ -490,7 +491,7 @@ def run_Telegram_bot():
             bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
 
     print("🤖 Telegram бот запущен...")
-    
+
     # Добавляем обработку ошибок при запуске
     try:
         bot.polling(none_stop=True, interval=1, timeout=20)
