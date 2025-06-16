@@ -35,30 +35,23 @@ def _gdelt_query(q, from_dt):
         endpoint_name = "docsearch" if "docsearch?" in url else "docsearchsearch"
         print(f"🌐 Пробуем GDELT endpoint #{endpoint_idx} ({endpoint_name})...")
         
-        # Попытаемся подключиться 2 раза для каждого endpoint
-        for attempt in range(2):
-            try:
-                print(f"🔄 {endpoint_name} попытка {attempt + 1}/2...")
-                r = requests.get(url, timeout=15)
-                r.raise_for_status()
-                
-                data = r.json()
-                articles = data.get("artList", [])
-                print(f"✅ GDELT ({endpoint_name}): найдено {len(articles)} новостей")
-                return [item["title"] for item in articles]
-                
-            except requests.exceptions.Timeout:
-                print(f"⏰ {endpoint_name} таймаут на попытке {attempt + 1}")
-            except requests.exceptions.ConnectionError:
-                print(f"🌐 {endpoint_name} проблема соединения на попытке {attempt + 1}")
-            except Exception as e:
-                print(f"❌ {endpoint_name} ошибка на попытке {attempt + 1}: {type(e).__name__}")
-                
-            if attempt < 1:  # Не последняя попытка для этого endpoint
-                import time
-                sleep_time = 2
-                print(f"⏳ Пауза {sleep_time} сек перед повтором...")
-                time.sleep(sleep_time)
+        # Одна попытка для каждого endpoint
+        try:
+            print(f"🔄 {endpoint_name} запрос...")
+            r = requests.get(url, timeout=15)
+            r.raise_for_status()
+            
+            data = r.json()
+            articles = data.get("artList", [])
+            print(f"✅ GDELT ({endpoint_name}): найдено {len(articles)} новостей")
+            return [item["title"] for item in articles]
+            
+        except requests.exceptions.Timeout:
+            print(f"⏰ {endpoint_name} таймаут")
+        except requests.exceptions.ConnectionError:
+            print(f"🌐 {endpoint_name} проблема соединения")
+        except Exception as e:
+            print(f"❌ {endpoint_name} ошибка: {type(e).__name__}")
         
         print(f"❌ GDELT endpoint {endpoint_name} недоступен")
     
