@@ -88,6 +88,12 @@ def _rule_based_sentiment_ru(text: str) -> str:
     """Простой rule-based анализ как резервный вариант"""
     text_lower = text.lower()
     
+    # Слова для нейтрального тона
+    neutral_words = [
+        "остал", "стабильн", "без изменен", "сохран", "поддерж", "удержал",
+        "на уровне", "в рамках", "соответств", "планов", "ожидан"
+    ]
+    
     positive_words = [
         "рост", "прибыль", "успех", "хорошо", "отлично", "рекорд", "выигр", 
         "плюс", "повыш", "увелич", "улучш", "позитив", "выгод", "доход"
@@ -95,13 +101,18 @@ def _rule_based_sentiment_ru(text: str) -> str:
     
     negative_words = [
         "падение", "убыток", "кризис", "плохо", "ужасно", "провал", "проигр",
-        "минус", "снизил", "уменьш", "ухудш", "негатив", "потер", "долг"
+        "минус", "снизил", "уменьш", "ухудш", "негатив", "потер", "долг", "упал"
     ]
     
+    # Проверяем нейтральные индикаторы в первую очередь
+    neutral_count = sum(1 for word in neutral_words if word in text_lower)
     pos_count = sum(1 for word in positive_words if word in text_lower)
     neg_count = sum(1 for word in negative_words if word in text_lower)
     
-    if pos_count > neg_count:
+    # Если есть сильные нейтральные сигналы
+    if neutral_count > 0 and pos_count == neg_count:
+        return "neutral"
+    elif pos_count > neg_count:
         return "positive"
     elif neg_count > pos_count:
         return "negative"
@@ -130,13 +141,29 @@ def classify_ru(text: str) -> str:
             
             result = _normalize_sentiment(predicted_label, "ru")
             
-            # Если уверенность низкая, используем rule-based
-            if confidence < 0.7:
-                rule_result = _rule_based_sentiment_ru(text)
-                print(f"⚡ Rule-based результат: {rule_result}")
-                if rule_result != "neutral":
+            # Всегда получаем rule-based результат для сравнения
+            rule_result = _rule_based_sentiment_ru(text)
+            print(f"⚡ Rule-based результат: {rule_result}")
+            
+            # Логика комбинирования:
+            # 1. Если ML уверен (>0.8), используем ML
+            # 2. Если ML неуверен (<0.7) и rule-based дает neutral, используем rule-based
+            # 3. Если оба дают одинаковый результат, используем его
+            # 4. При конфликте и низкой уверенности ML, предпочитаем rule-based
+            
+            if confidence > 0.8:
+                print(f"🎯 Высокая уверенность ML, используем: {result}")
+            elif confidence < 0.7:
+                if rule_result == "neutral" and result == "negative":
                     result = rule_result
-                    print(f"🔄 Используем rule-based результат")
+                    print(f"🔄 ML неуверен, rule-based предлагает neutral, используем rule-based")
+                elif rule_result == result:
+                    print(f"🤝 ML и rule-based согласны: {result}")
+                else:
+                    print(f"🤔 Конфликт: ML={result}, rule={rule_result}, используем rule-based")
+                    result = rule_result
+            else:
+                print(f"⚖️ Средняя уверенность ML, используем: {result}")
             
             print(f"✅ Финальный результат: {result}")
             return result
