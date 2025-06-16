@@ -1,4 +1,3 @@
-
 from functools import lru_cache
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch, requests, datetime as dt
@@ -19,12 +18,12 @@ def _load_models():
     ru_tok = AutoTokenizer.from_pretrained(RU_MODEL_NAME)
     ru_mdl = AutoModelForSequenceClassification.from_pretrained(RU_MODEL_NAME)
     ru_mdl.eval()
-    
+
     # Английская модель
     en_tok = AutoTokenizer.from_pretrained(EN_MODEL_NAME)
     en_mdl = AutoModelForSequenceClassification.from_pretrained(EN_MODEL_NAME)
     en_mdl.eval()
-    
+
     return ru_tok, ru_mdl, en_tok, en_mdl
 
 def classify_ru(text: str) -> str:
