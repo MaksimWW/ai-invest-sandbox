@@ -27,6 +27,8 @@ FIGI_MAP = {
     "GAZP": "BBG004730RP0",
     "LKOH": "BBG004730ZJ9",
     "SBER": "BBG0047315Y7",   # Сбербанк
+    "NVDA": "BBG000BBJQV0",   # NVIDIA
+    "AMD":  "BBG000BBQCY0",   # Advanced Micro Devices
 }
 
 def get_last_prices():
@@ -397,13 +399,29 @@ def run_Telegram_bot():
 
         elif text.lower().startswith("/ideas"):
             parts = text.split()
-            fast, slow, atr = 5, 15, 0     # дефолт
-            if len(parts) >= 4:
-                fast, slow, atr = map(float, parts[1:4])
-            reply = f"💡 Композит-идеи SMA{int(fast)}/{int(slow)} ATR≥{atr}:\n"
-            for tk, fg in FIGI_MAP.items():
+            try:
+                fast = int(parts[1]) if len(parts) > 1 else 5
+                slow = int(parts[2]) if len(parts) > 2 else 15
+                atr = float(parts[3]) if len(parts) > 3 else 0
+                # Если указаны тикеры (начиная с 5го элемента) → берём их, иначе все из FIGI_MAP
+                tickers = [t.upper() for t in parts[4:]] if len(parts) > 4 else list(FIGI_MAP.keys())
+            except (ValueError, IndexError):
+                bot.reply_to(msg,
+                    "Формат: /ideas [fast] [slow] [ATR] [ticker...]\n"
+                    "Пример: /ideas 5 15 0.5 NVDA AMD\n"
+                    "По умолчанию: /ideas 5 15 0 (все тикеры)")
+                return
+                
+            reply = f"💡 Композит-идеи SMA{fast}/{slow} ATR≥{atr}:\n"
+            
+            for tk in tickers:
+                fg = FIGI_MAP.get(tk)
+                if not fg:
+                    reply += f"• {tk:<6} → 🚫 нет FIGI\n"
+                    continue
+                    
                 try:
-                    signal = generate_signal(fg, fast=int(fast), slow=int(slow), atr_ratio=atr)
+                    signal = generate_signal(fg, fast=fast, slow=slow, atr_ratio=atr)
                     tech = 1 if signal == "BUY" else -1 if signal == "SELL" else 0
                     sent = get_sentiment_score(tk)
                     score = tech + sent
@@ -412,6 +430,7 @@ def run_Telegram_bot():
                         reply += f"• {tk:<6} {side} (score {score})\n"
                 except Exception as e:
                     reply += f"• {tk:<6} ⚠️ Ошибка: {e}\n"
+                    
             if reply.strip().endswith(":"):
                 reply += "Нет сильных идей сейчас."
             bot.reply_to(msg, reply)
