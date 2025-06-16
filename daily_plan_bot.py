@@ -113,7 +113,7 @@ def send_telegram_message(message):
         print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
 
-def get_sentiment_score(ticker: str) -> int:
+def get_sentiment_score(ticker: str, hours: int = 24) -> int:
     """Анализирует настроение новостей по тикеру (русские + английские)"""
     # Определяем тип тикера
     russian_tickers = {"YNDX", "FXIT", "GAZP", "LKOH", "SBER", "NVTK"}
@@ -123,29 +123,29 @@ def get_sentiment_score(ticker: str) -> int:
     
     if ticker in russian_tickers:
         # Для русских тикеров используем русские источники
-        print(f"🇷🇺 Ищем русские новости для {ticker}...")
-        ru_texts = latest_news_ru(ticker, hours=24)
+        print(f"🇷🇺 Ищем русские новости для {ticker} за {hours}ч...")
+        ru_texts = latest_news_ru(ticker, hours=hours)
         all_texts.extend(ru_texts)
         print(f"📰 Русские новости для {ticker}: {len(ru_texts)}")
         
     elif ticker in american_tickers:
         # Для американских тикеров используем английские источники
-        print(f"🇺🇸 Ищем англоязычные новости для {ticker}...")
-        en_texts = fetch_news(ticker, hours=24)
+        print(f"🇺🇸 Ищем англоязычные новости для {ticker} за {hours}ч...")
+        en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(en_texts)
         print(f"📰 Англоязычные новости для {ticker}: {len(en_texts)}")
         
     else:
         # Для неизвестных тикеров пробуем оба источника
-        print(f"🌍 Ищем новости для неизвестного тикера {ticker} в обоих источниках...")
-        ru_texts = latest_news_ru(ticker, hours=24)
-        en_texts = fetch_news(ticker, hours=24)
+        print(f"🌍 Ищем новости для неизвестного тикера {ticker} за {hours}ч в обоих источниках...")
+        ru_texts = latest_news_ru(ticker, hours=hours)
+        en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(ru_texts)
         all_texts.extend(en_texts)
         print(f"📰 Новости для {ticker}: русских {len(ru_texts)}, английских {len(en_texts)}")
     
     if not all_texts:
-        print(f"❌ Новости для {ticker} не найдены")
+        print(f"❌ Новости для {ticker} не найдены за {hours}ч")
         return 0
     
     votes = sum(1 if classify_multi(t) == "positive"
@@ -153,7 +153,7 @@ def get_sentiment_score(ticker: str) -> int:
                 else 0
                 for t in all_texts)
     sentiment_score = max(-1, min(1, votes))
-    print(f"📊 Настроение для {ticker}: {sentiment_score} (из {len(all_texts)} новостей)")
+    print(f"📊 Настроение для {ticker}: {sentiment_score} (из {len(all_texts)} новостей за {hours}ч)")
     return sentiment_score
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
@@ -382,8 +382,9 @@ def run_Telegram_bot():
 Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
-/ideas [fast] [slow] [ATR] - композитные идеи (теханализ + новости)
-Пример: /ideas 5 15 0.5
+/ideas [fast] [slow] [ATR] [hours] [ticker...] - композитные идеи (теханализ + новости)
+Пример: /ideas 5 15 0.5 6 NVDA AMD  (новости за 6 часов)
+По умолчанию: /ideas 5 15 0 24 (все тикеры, новости за 24ч)
 
 /pnl - показать общий P/L
 /debug - показать лог отладки
@@ -427,19 +428,24 @@ def run_Telegram_bot():
         elif text.lower().startswith("/ideas"):
             parts = text.split()
             try:
+                # 1-3 аргументы – fast, slow, atr
                 fast = int(parts[1]) if len(parts) > 1 else 5
                 slow = int(parts[2]) if len(parts) > 2 else 15
                 atr = float(parts[3]) if len(parts) > 3 else 0
-                # Если указаны тикеры (начиная с 5го элемента) → берём их, иначе все из FIGI_MAP
-                tickers = [t.upper() for t in parts[4:]] if len(parts) > 4 else list(FIGI_MAP.keys())
+                
+                # 4-й аргумент (hours) – за сколько часов брать новости
+                hours = int(parts[4]) if len(parts) > 4 else 24
+                
+                # всё, что после hours – список тикеров
+                tickers = [t.upper() for t in parts[5:]] if len(parts) > 5 else list(FIGI_MAP.keys())
             except (ValueError, IndexError):
                 bot.reply_to(msg,
-                    "Формат: /ideas [fast] [slow] [ATR] [ticker...]\n"
-                    "Пример: /ideas 5 15 0.5 NVDA AMD\n"
-                    "По умолчанию: /ideas 5 15 0 (все тикеры)")
+                    "Формат: /ideas [fast] [slow] [ATR] [hours] [ticker...]\n"
+                    "Пример: /ideas 5 15 0.5 6 NVDA AMD  (новости за 6 часов)\n"
+                    "По умолчанию: /ideas 5 15 0 24 (все тикеры, новости за 24ч)")
                 return
                 
-            reply = f"💡 Композит-идеи SMA{fast}/{slow} ATR≥{atr}:\n"
+            reply = f"💡 Композит-идеи SMA{fast}/{slow} ATR≥{atr} новости≤{hours}ч:\n"
             
             for tk in tickers:
                 fg = FIGI_MAP.get(tk)
@@ -450,7 +456,7 @@ def run_Telegram_bot():
                 try:
                     signal = generate_signal(fg, fast=fast, slow=slow, atr_ratio=atr)
                     tech = 1 if signal == "BUY" else -1 if signal == "SELL" else 0
-                    sent = get_sentiment_score(tk)
+                    sent = get_sentiment_score(tk, hours=hours)
                     score = tech + sent
                     if abs(score) >= 2:
                         side = "LONG" if score > 0 else "SHORT"
