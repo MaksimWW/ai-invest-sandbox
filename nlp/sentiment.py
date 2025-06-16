@@ -1,56 +1,109 @@
+
 from functools import lru_cache
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch, requests, datetime as dt
 from news_feed import fetch_news
 from langdetect import detect
 
-# Русская модель
-RU_MODEL_NAME = "sismetanin/rubert-rusentiment"
-RU_LABELS = ["negative", "neutral", "positive"]
+# Используем рабочие модели
+RU_MODEL_NAME = "blanchefort/rubert-base-cased-sentiment"
+RU_LABELS = ["NEUTRAL", "POSITIVE", "NEGATIVE"]
 
-# Английская модель (FinBERT для финансовых новостей)
-EN_MODEL_NAME = "ProsusAI/finbert"
-EN_LABELS = ["negative", "neutral", "positive"]
+# Английская модель для финансовых новостей
+EN_MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+EN_LABELS = ["LABEL_0", "LABEL_1", "LABEL_2"]  # negative, neutral, positive
 
 @lru_cache(maxsize=2)
 def _load_models():
-    # Русская модель
-    ru_tok = AutoTokenizer.from_pretrained(RU_MODEL_NAME)
-    ru_mdl = AutoModelForSequenceClassification.from_pretrained(RU_MODEL_NAME)
-    ru_mdl.eval()
+    """Загружает модели с обработкой ошибок"""
+    try:
+        # Русская модель
+        print("🔄 Загружаем русскую модель...")
+        ru_tok = AutoTokenizer.from_pretrained(RU_MODEL_NAME)
+        ru_mdl = AutoModelForSequenceClassification.from_pretrained(RU_MODEL_NAME)
+        ru_mdl.eval()
+        print("✅ Русская модель загружена")
+    except Exception as e:
+        print(f"❌ Ошибка загрузки русской модели: {e}")
+        ru_tok, ru_mdl = None, None
 
-    # Английская модель
-    en_tok = AutoTokenizer.from_pretrained(EN_MODEL_NAME)
-    en_mdl = AutoModelForSequenceClassification.from_pretrained(EN_MODEL_NAME)
-    en_mdl.eval()
+    try:
+        # Английская модель
+        print("🔄 Загружаем английскую модель...")
+        en_tok = AutoTokenizer.from_pretrained(EN_MODEL_NAME)
+        en_mdl = AutoModelForSequenceClassification.from_pretrained(EN_MODEL_NAME)
+        en_mdl.eval()
+        print("✅ Английская модель загружена")
+    except Exception as e:
+        print(f"❌ Ошибка загрузки английской модели: {e}")
+        en_tok, en_mdl = None, None
 
     return ru_tok, ru_mdl, en_tok, en_mdl
 
+def _normalize_sentiment(label: str, model_type: str = "ru") -> str:
+    """Нормализует метки настроения к единому формату"""
+    if model_type == "ru":
+        # Для русской модели
+        mapping = {
+            "NEGATIVE": "negative",
+            "NEUTRAL": "neutral", 
+            "POSITIVE": "positive"
+        }
+        return mapping.get(label, "neutral")
+    else:
+        # Для английской модели (Twitter RoBERTa)
+        mapping = {
+            "LABEL_0": "negative",  # negative
+            "LABEL_1": "neutral",   # neutral
+            "LABEL_2": "positive"   # positive
+        }
+        return mapping.get(label, "neutral")
+
 def classify_ru(text: str) -> str:
     """Анализ настроения русского текста"""
-    ru_tok, ru_mdl, _, _ = _load_models()
-    inputs = ru_tok(text, return_tensors="pt", truncation=True)
-    with torch.no_grad():
-        logits = ru_mdl(**inputs).logits
-    return RU_LABELS[logits.argmax().item()]
+    try:
+        ru_tok, ru_mdl, _, _ = _load_models()
+        if ru_tok is None or ru_mdl is None:
+            return "neutral"
+        
+        inputs = ru_tok(text, return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            logits = ru_mdl(**inputs).logits
+        
+        predicted_label = RU_LABELS[logits.argmax().item()]
+        return _normalize_sentiment(predicted_label, "ru")
+    except Exception as e:
+        print(f"⚠️ Ошибка анализа русского текста: {e}")
+        return "neutral"
 
 def classify_en(text: str) -> str:
     """Анализ настроения английского текста"""
-    _, _, en_tok, en_mdl = _load_models()
-    inputs = en_tok(text, return_tensors="pt", truncation=True)
-    with torch.no_grad():
-        logits = en_mdl(**inputs).logits
-    return EN_LABELS[logits.argmax().item()]
+    try:
+        _, _, en_tok, en_mdl = _load_models()
+        if en_tok is None or en_mdl is None:
+            return "neutral"
+        
+        inputs = en_tok(text, return_tensors="pt", truncation=True, max_length=512)
+        with torch.no_grad():
+            logits = en_mdl(**inputs).logits
+        
+        predicted_label = EN_LABELS[logits.argmax().item()]
+        return _normalize_sentiment(predicted_label, "en")
+    except Exception as e:
+        print(f"⚠️ Ошибка анализа английского текста: {e}")
+        return "neutral"
 
 def classify_multi(text: str) -> str:
     """Мультиязычный анализ настроения"""
     try:
+        # Определяем язык
         lang = detect(text[:200])
         if lang == "ru":
             return classify_ru(text)
         else:
             return classify_en(text)
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Ошибка определения языка: {e}")
         # Если язык не определился, пробуем английский
         return classify_en(text)
 
