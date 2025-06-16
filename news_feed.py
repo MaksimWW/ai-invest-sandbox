@@ -1,4 +1,3 @@
-
 """
 news_feed.py  –   агрегатор англоязычных новостей
 -------------------------------------------------
@@ -28,11 +27,20 @@ def _gdelt_query(q, from_dt):
     url = ("https://api.gdeltproject.org/api/v2/doc/docsearch"
            f"?query={q}&filter=SourceCommonName:english&maxrecords=100"
            f"&format=json&mode=ArtList&filter=PublishDate>{since}")
-    try:
-        r = requests.get(url, timeout=6).json()
-        return [item["title"] for item in r.get("artList", [])]
-    except Exception:
-        return []
+
+    # Попытаемся подключиться 3 раза
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=15)
+            r.raise_for_status()
+            return [item["title"] for item in r.json().get("artList", [])]
+        except Exception as e:
+            if attempt == 2:  # Последняя попытка
+                print(f"GDELT API недоступен после 3 попыток: {e}")
+                return []
+            import time
+            time.sleep(2)  # Пауза перед повтором
+    return []
 
 def fetch_news(ticker: str, hours: int = 24) -> list[str]:
     """Возвращает список англ. заголовков за последние `hours` часов."""
