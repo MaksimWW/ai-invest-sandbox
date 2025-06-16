@@ -6,7 +6,8 @@ from datetime import datetime
 from tinkoff.invest import Client
 from signals.sma_breakout import generate_signal
 from utils.sheets_logger import log_trade
-from nlp.ru_sentiment import latest_news, classify
+from nlp.sentiment import latest_news_ru, classify_multi
+from news_feed import fetch_news
 
 # Переменные окружения
 TINKOFF_SANDBOX_TOKEN = os.getenv("TINKOFF_SANDBOX_TOKEN")
@@ -111,14 +112,19 @@ def send_telegram_message(message):
         return False
 
 def get_sentiment_score(ticker: str) -> int:
-    """Анализирует настроение новостей по тикеру"""
-    texts = latest_news(ticker)
-    if not texts:
+    """Анализирует настроение новостей по тикеру (русские + английские)"""
+    # Получаем новости из обоих источников
+    ru_texts = latest_news_ru(ticker, hours=24)
+    en_texts = fetch_news(ticker, hours=24)
+    
+    all_texts = ru_texts + en_texts
+    if not all_texts:
         return 0
-    votes = sum(1 if classify(t) == "positive"
-                else -1 if classify(t) == "negative"
+    
+    votes = sum(1 if classify_multi(t) == "positive"
+                else -1 if classify_multi(t) == "negative"
                 else 0
-                for t in texts)
+                for t in all_texts)
     return max(-1, min(1, votes))   # нормализуем к −1..+1
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
