@@ -60,6 +60,7 @@ def _gdelt_query(q, from_dt):
 
 def fetch_news(ticker: str, hours: int = 24) -> list[str]:
     """Получить новости по тикеру из NewsAPI + GDELT + Yahoo Finance"""
+    cutoff = dt.datetime.utcnow() - dt.timedelta(hours=hours)
     news = []
 
     # NewsAPI
