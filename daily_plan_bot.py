@@ -123,39 +123,36 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
     all_texts = []
 
     if ticker in russian_tickers:
-        # Для русских тикеров используем русские источники
-        print(f"🇷🇺 Ищем русские новости для {ticker} за {hours}ч...")
+        print(f"🇷🇺 Анализ русских новостей {ticker}...")
         ru_texts = latest_news_ru(ticker, hours=hours)
         all_texts.extend(ru_texts)
-        print(f"📰 Русские новости для {ticker}: {len(ru_texts)}")
 
     elif ticker in american_tickers:
-        # Для американских тикеров используем английские источники
-        print(f"🇺🇸 Ищем англоязычные новости для {ticker} за {hours}ч...")
+        print(f"🇺🇸 Анализ англоязычных новостей {ticker}...")
         en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(en_texts)
-        print(f"📰 Англоязычные новости для {ticker}: {len(en_texts)}")
-
-    else:
-        # Для неизвестных тикеров пробуем оба источника
-        print(f"🌍 Ищем новости для неизвестного тикера {ticker}...")
-        ru_texts = latest_news_ru(ticker, hours=hours)
-        en_texts = fetch_news(ticker, hours=hours)
-        all_texts.extend(ru_texts)
-        all_texts.extend(en_texts)
-        print(f"📰 Найдено новостей: {len(all_texts)}")
 
     if not all_texts:
-        print(f"❌ Новости для {ticker} не найдены за {hours}ч")
+        print(f"❌ Новости для {ticker} не найдены")
         return 0
 
-    votes = sum(1 if classify_multi(t) == "positive"
-                else -1 if classify_multi(t) == "negative"
-                else 0
-                for t in all_texts)
-    sentiment_score = max(-1, min(1, votes))
-    print(f"📊 Настроение для {ticker}: {sentiment_score} (из {len(all_texts)} новостей за {hours}ч)")
-    return sentiment_score
+    # Анализируем настроение (только первые 5 новостей для экономии ресурсов)
+    sentiments = []
+    for text in all_texts[:5]:
+        try:
+            sentiment = classify_multi(text)
+            if sentiment == "positive":
+                sentiments.append(1)
+            elif sentiment == "negative":
+                sentiments.append(-1)
+            else:
+                sentiments.append(0)
+        except Exception:
+            sentiments.append(0)
+
+    total_score = sum(sentiments)
+    print(f"📊 Настроение {ticker}: {total_score} (из {len(all_texts)} новостей)")
+    return total_score
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
     """Упрощенная функция для логирования сделок по сигналам бота"""

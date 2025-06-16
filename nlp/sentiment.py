@@ -1,4 +1,3 @@
-
 from functools import lru_cache
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 import torch, requests, datetime as dt, re
@@ -51,7 +50,7 @@ MODEL_CONFIG = {
 
 class FinancialSentimentEnsemble:
     """Ensemble анализатор с несколькими моделями и финансовой логикой"""
-    
+
     def __init__(self):
         # Финансовые словари
         self.financial_terms = {
@@ -76,17 +75,17 @@ class FinancialSentimentEnsemble:
                 'en': ['remained', 'stable', 'flat', 'unchanged', 'steady']
             }
         }
-        
+
         # Паттерны для числовых значений
         self.number_pattern = r'(\d+(?:,\d+)?(?:\.\d+)?)\s*%'
-        
+
         # Весовые коэффициенты для разных источников сигналов
         self.weights = {
             'ml_ensemble': 0.5,      # Вес ML-ансамбля
             'financial_terms': 0.3,   # Вес финансовых терминов
             'numeric_context': 0.2    # Вес числового контекста
         }
-    
+
     def _normalize_multilingual_sentiment(self, label: str, model_name: str) -> str:
         """Нормализует метки разных моделей к единому формату"""
         if "nlptown" in model_name:
@@ -113,12 +112,12 @@ class FinancialSentimentEnsemble:
                 return "positive"
             else:
                 return "neutral"
-    
+
     def _extract_financial_signals(self, text: str, lang: str) -> Dict[str, float]:
         """Извлекает финансовые сигналы из текста"""
         text_lower = text.lower()
         signals = {'positive': 0, 'negative': 0, 'neutral': 0}
-        
+
         # Проверяем финансовые термины
         for sentiment_type, terms_dict in self.financial_terms.items():
             if lang in terms_dict:
@@ -132,59 +131,59 @@ class FinancialSentimentEnsemble:
                             signals['negative'] += weight
                         else:  # neutral
                             signals['neutral'] += 1.0
-        
+
         return signals
-    
+
     def _extract_numeric_context(self, text: str) -> Dict[str, float]:
         """Анализирует числовой контекст (проценты, суммы)"""
         context = {'magnitude': 0, 'direction': 0}  # direction: +1=рост, -1=падение
-        
+
         # Ищем проценты
         numbers = re.findall(self.number_pattern, text.lower())
         if numbers:
             try:
                 max_number = max(float(num.replace(',', '.')) for num in numbers)
                 context['magnitude'] = max_number
-                
+
                 # Определяем направление по контексту
                 growth_words = ['выросли', 'рост', 'увелич', 'повыш', 'gained', 'rise', 'up']
                 decline_words = ['упали', 'снизил', 'падение', 'уменьш', 'declined', 'dropped', 'down']
-                
+
                 text_lower = text.lower()
                 if any(word in text_lower for word in growth_words):
                     context['direction'] = 1
                 elif any(word in text_lower for word in decline_words):
                     context['direction'] = -1
-                    
+
             except ValueError:
                 pass
-        
+
         return context
-    
+
     def _ensemble_predict(self, text: str, models_config: List[Dict], lang: str = "ru") -> Dict[str, float]:
         """Выполняет ensemble предсказание с несколькими моделями"""
         predictions = []
         total_weight = 0
-        
+
         for model_info in models_config:
             try:
                 # Пробуем загрузить и использовать модель
                 tokenizer = AutoTokenizer.from_pretrained(model_info["name"])
                 model = AutoModelForSequenceClassification.from_pretrained(model_info["name"])
                 model.eval()
-                
+
                 inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
                 with torch.no_grad():
                     logits = model(**inputs).logits
-                
+
                 probabilities = torch.softmax(logits, dim=-1)
                 predicted_idx = logits.argmax().item()
                 predicted_label = model_info["labels"][predicted_idx]
                 confidence = probabilities[0][predicted_idx].item()
-                
+
                 # Нормализуем результат
                 normalized_sentiment = self._normalize_multilingual_sentiment(predicted_label, model_info["name"])
-                
+
                 predictions.append({
                     'sentiment': normalized_sentiment,
                     'confidence': confidence,
@@ -192,30 +191,30 @@ class FinancialSentimentEnsemble:
                     'model': model_info["description"]
                 })
                 total_weight += model_info["weight"]
-                
+
                 print(f"🤖 {model_info['description']}: {normalized_sentiment} (conf: {confidence:.3f})")
-                
+
             except Exception as e:
                 print(f"⚠️ Ошибка модели {model_info['name']}: {e}")
                 continue
-        
+
         # Вычисляем взвешенный результат
         if not predictions:
             return {'sentiment': 'neutral', 'confidence': 0.0, 'details': []}
-        
+
         # Агрегируем результаты
         weighted_scores = {'positive': 0, 'negative': 0, 'neutral': 0}
         total_confidence = 0
-        
+
         for pred in predictions:
             weight_norm = pred['weight'] / total_weight
             weighted_scores[pred['sentiment']] += weight_norm * pred['confidence']
             total_confidence += weight_norm * pred['confidence']
-        
+
         # Определяем финальный результат
         final_sentiment = max(weighted_scores, key=weighted_scores.get)
         final_confidence = total_confidence / len(predictions)
-        
+
         return {
             'sentiment': final_sentiment,
             'confidence': final_confidence,
@@ -232,127 +231,78 @@ def _load_ensemble_models():
     print("🔄 Инициализация ensemble моделей...")
     return True  # Модели загружаются динамически в _ensemble_predict
 
+@lru_cache(maxsize=256)
 def classify_ru_ensemble(text: str) -> str:
-    """Ensemble анализ русского текста с несколькими моделями"""
-    print(f"🧠 ENSEMBLE АНАЛИЗ RU: '{text[:50]}...'")
-    print("=" * 60)
-    
-    try:
-        # 1. ML Ensemble
-        ml_result = _ensemble_analyzer._ensemble_predict(
-            text, MODEL_CONFIG["ru_models"], "ru"
-        )
-        print(f"🤖 ML Ensemble: {ml_result['sentiment']} (conf: {ml_result['confidence']:.3f})")
-        
-        # 2. Финансовые термины
-        financial_signals = _ensemble_analyzer._extract_financial_signals(text, "ru")
-        print(f"💰 Финансовые сигналы: {financial_signals}")
-        
-        # 3. Числовой контекст
-        numeric_context = _ensemble_analyzer._extract_numeric_context(text)
-        print(f"🔢 Числовой контекст: {numeric_context}")
-        
-        # 4. Комбинируем результаты
-        final_score = 0
-        
-        # ML вклад
-        ml_score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(ml_result['sentiment'], 0)
-        final_score += ml_score * _ensemble_analyzer.weights['ml_ensemble'] * ml_result['confidence']
-        
-        # Финансовые термины
-        if financial_signals['positive'] > financial_signals['negative']:
-            term_score = min(1.0, financial_signals['positive'] / 3.0)
-        elif financial_signals['negative'] > financial_signals['positive']:
-            term_score = -min(1.0, financial_signals['negative'] / 3.0)
-        else:
-            term_score = 0
-        
-        final_score += term_score * _ensemble_analyzer.weights['financial_terms']
-        
-        # Числовой контекст
-        if numeric_context['magnitude'] > 0:
-            magnitude_weight = min(1.0, numeric_context['magnitude'] / 10.0)  # нормализуем к 1.0
-            numeric_score = numeric_context['direction'] * magnitude_weight
-            final_score += numeric_score * _ensemble_analyzer.weights['numeric_context']
-            print(f"📊 Числовой вклад: {numeric_score:.3f} (направление: {numeric_context['direction']}, величина: {numeric_context['magnitude']}%)")
-        
-        # Определяем финальный результат
-        if final_score > 0.3:
-            result = 'positive'
-        elif final_score < -0.3:
-            result = 'negative'
-        else:
-            result = 'neutral'
-        
-        print(f"🎯 Финальный скор: {final_score:.3f} → {result}")
-        print("=" * 60)
-        
-        return result
-        
-    except Exception as e:
-        print(f"⚠️ Ошибка ensemble анализа: {e}")
+    """Классифицирует русский текст с помощью ensemble моделей"""
+    return _ensemble_classify(text, MODEL_CONFIG["ru_models"])
+
+@lru_cache(maxsize=256)  
+def classify_en_ensemble(text: str) -> str:
+    """Классифицирует английский текст с помощью ensemble моделей"""
+    return _ensemble_classify(text, MODEL_CONFIG["en_models"])
+
+def _ensemble_classify(text: str, models_config: list) -> str:
+    """Выполняет ensemble предсказание с несколькими моделями"""
+    predictions = []
+    total_weight = 0
+
+    # Ограничиваем количество используемых моделей для снижения нагрузки
+    active_models = models_config[:2]  # Используем только 2 модели
+
+    for model_info in active_models:
+        try:
+            # Пробуем загрузить и использовать модель
+            tokenizer = AutoTokenizer.from_pretrained(model_info["name"])
+            model = AutoModelForSequenceClassification.from_pretrained(model_info["name"])
+            model.eval()
+
+            inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+            with torch.no_grad():
+                logits = model(**inputs).logits
+
+            probabilities = torch.softmax(logits, dim=-1)
+            predicted_idx = logits.argmax().item()
+            predicted_label = model_info["labels"][predicted_idx]
+            confidence = probabilities[0][predicted_idx].item()
+
+            # Конвертируем в стандартный формат
+            if predicted_label.upper() in ["POSITIVE", "POS"]:
+                sentiment_score = 1.0
+            elif predicted_label.upper() in ["NEGATIVE", "NEG"]:
+                sentiment_score = -1.0
+            else:
+                sentiment_score = 0.0
+
+            predictions.append(sentiment_score * confidence * model_info["weight"])
+            total_weight += model_info["weight"]
+
+        except Exception as e:
+            print(f"⚠️ Модель {model_info['name'][:20]}... недоступна")
+            continue
+
+    if not predictions:
         return "neutral"
 
-def classify_en_ensemble(text: str) -> str:
-    """Ensemble анализ английского текста с FinBERT и RoBERTa"""
-    print(f"🧠 ENSEMBLE АНАЛИЗ EN: '{text[:50]}...'")
-    print("=" * 60)
-    
-    try:
-        # ML Ensemble для английского
-        ml_result = _ensemble_analyzer._ensemble_predict(
-            text, MODEL_CONFIG["en_models"], "en"
-        )
-        print(f"🤖 ML Ensemble: {ml_result['sentiment']} (conf: {ml_result['confidence']:.3f})")
-        
-        # Финансовые термины
-        financial_signals = _ensemble_analyzer._extract_financial_signals(text, "en")
-        print(f"💰 Финансовые сигналы: {financial_signals}")
-        
-        # Числовой контекст
-        numeric_context = _ensemble_analyzer._extract_numeric_context(text)
-        print(f"🔢 Числовой контекст: {numeric_context}")
-        
-        # Для английского больше доверяем ML (особенно FinBERT)
-        weights_en = {'ml_ensemble': 0.7, 'financial_terms': 0.2, 'numeric_context': 0.1}
-        
-        final_score = 0
-        
-        # ML вклад (больший вес для английского)
-        ml_score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(ml_result['sentiment'], 0)
-        final_score += ml_score * weights_en['ml_ensemble'] * ml_result['confidence']
-        
-        # Остальная логика аналогична русскому
-        if financial_signals['positive'] > financial_signals['negative']:
-            term_score = min(1.0, financial_signals['positive'] / 3.0)
-        elif financial_signals['negative'] > financial_signals['positive']:
-            term_score = -min(1.0, financial_signals['negative'] / 3.0)
-        else:
-            term_score = 0
-        
-        final_score += term_score * weights_en['financial_terms']
-        
-        if numeric_context['magnitude'] > 0:
-            magnitude_weight = min(1.0, numeric_context['magnitude'] / 10.0)
-            numeric_score = numeric_context['direction'] * magnitude_weight
-            final_score += numeric_score * weights_en['numeric_context']
-        
-        # Определяем результат
-        if final_score > 0.2:  # Меньший порог для английского
-            result = 'positive'
-        elif final_score < -0.2:
-            result = 'negative'
-        else:
-            result = 'neutral'
-        
-        print(f"🎯 Финальный скор: {final_score:.3f} → {result}")
-        print("=" * 60)
-        
-        return result
-        
-    except Exception as e:
-        print(f"⚠️ Ошибка ensemble анализа: {e}")
-        return "neutral"
+    # Вычисляем взвешенный результат
+    ensemble_score = sum(predictions) / total_weight if total_weight > 0 else 0
+
+    # Добавляем финансовый контекст
+    financial_signals = _extract_financial_signals(text)
+
+    # Итоговый скор с учетом финансовых сигналов
+    final_score = (
+        ensemble_score * 0.8 +
+        (financial_signals['positive'] - financial_signals['negative']) * 0.2
+    )
+
+    if final_score > 0.1:
+        result = "positive"
+    elif final_score < -0.1:
+        result = "negative"
+    else:
+        result = "neutral"
+
+    return result
 
 # Основные функции с ensemble подходом
 def classify_ru(text: str) -> str:
@@ -379,16 +329,16 @@ def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
     """Анализирует тренд настроения по множеству текстов"""
     if not texts:
         return {'trend': 0.0, 'confidence': 0.0, 'count': 0}
-    
+
     sentiments = []
     for text in texts:
         sentiment = classify_multi(text)
         score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(sentiment, 0)
         sentiments.append(score)
-    
+
     avg_sentiment = sum(sentiments) / len(sentiments)
     consistency = 1.0 - (len(set(sentiments)) - 1) / 2.0
-    
+
     return {
         'trend': avg_sentiment,
         'confidence': consistency,
@@ -406,27 +356,67 @@ def classify(text: str) -> str:
 
 # RSS-граббер (без изменений)
 RSS_FEEDS = [
-    "https://tass.ru/rss/v2.xml",
-    "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+    "https://www.rbc.ru/rss/finances.rss",
+    "https://www.vedomosti.ru/rss/news",
+    "https://lenta.ru/rss/finances",
+    "https://ria.ru/export/rss2/economy/index.xml",
+    "https://www.interfax.ru/rss.asp?sec=business",
+    "https://www.kommersant.ru/RSS/main.xml",
+    "https://quote.rbc.ru/news/rss/",
 ]
 
 def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
-    """Получение русских новостей из RSS"""
-    cutoff = dt.datetime.utcnow() - dt.timedelta(hours=hours)
-    found = []
-    for url in RSS_FEEDS:
+    """Получить последние русские новости по тикеру"""
+    cutoff = dt.datetime.now() - dt.timedelta(hours=hours)
+    all_news = []
+
+    # Добавляем альтернативные названия для поиска
+    search_terms = [ticker.upper()]
+
+    # Маппинг тикеров на русские названия
+    ticker_names = {
+        "YNDX": ["Яндекс", "Yandex"],
+        "SBER": ["Сбербанк", "Сбер"],
+        "GAZP": ["Газпром"],
+        "LKOH": ["Лукойл", "ЛУКОЙЛ"],
+        "NVTK": ["Новатэк", "НОВАТЭК"],
+        "FXIT": ["Fix Price", "Фикс Прайс"]
+    }
+
+    if ticker in ticker_names:
+        search_terms.extend(ticker_names[ticker])
+
+    print(f"🔍 Ищем новости по терминам: {search_terms}")
+
+    for rss_url in RSS_FEEDS:
         try:
-            xml = requests.get(url, timeout=5).text
-            for it in xml.split("<item>")[1:]:
-                title = it.split("<title>")[1].split("</title>")[0]
-                pub   = it.split("<pubDate>")[1].split("</pubDate>")[0]
-                dt_pub = dt.datetime.strptime(pub[:-6], "%a, %d %b %Y %H:%M:%S")
-                if dt_pub > cutoff and ticker.lower() in title.lower():
-                    found.append(title)
+            response = requests.get(rss_url, timeout=10)
+            response.raise_for_status()
+
+            # Парсим XML
+            import xml.etree.ElementTree as ET
+            root = ET.fromstring(response.content)
+
+            # Находим все элементы item
+            items = root.findall('.//item')
+
+            for item in items:
+                title_elem = item.find('title')
+                if title_elem is not None and title_elem.text:
+                    title = title_elem.text.strip()
+
+                    # Проверяем, содержит ли заголовок любой из поисковых терминов
+                    title_upper = title.upper()
+                    if any(term.upper() in title_upper for term in search_terms):
+                        all_news.append(title)
+                        print(f"✅ Найдена новость: {title[:80]}...")
+
         except Exception as e:
-            print(f"⚠️ Ошибка обработки RSS {url}: {e}")
+            print(f"⚠️ RSS недоступен: {rss_url[:50]}...")
             continue
-    return found
+
+    print(f"📊 Итого найдено новостей для {ticker}: {len(all_news)}")
+    return all_news
 
 def latest_news(ticker: str, hours: int = 24) -> list[str]:
     return latest_news_ru(ticker, hours)
