@@ -1,10 +1,11 @@
 
 from functools import lru_cache
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-import torch, requests, datetime as dt
+import torch, requests, datetime as dt, re
 from news_feed import fetch_news
 from langdetect import detect
 import warnings
+from typing import Dict, List, Tuple
 
 # Подавляем предупреждения о неиспользуемых весах модели
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
@@ -28,6 +29,98 @@ RU_MODELS = [
 # Английская модель для финансовых новостей
 EN_MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment-latest"
 EN_LABELS = ["LABEL_0", "LABEL_1", "LABEL_2"]  # negative, neutral, positive
+
+class ContextualSentimentAnalyzer:
+    """Композитный анализатор с пониманием контекста"""
+    
+    def __init__(self):
+        self.magnitude_patterns = {
+            'high_positive': r'(рекорд|взлет|скачок|бум|превзош|breakthrough|surge)',
+            'moderate_positive': r'(выросли|рост|увелич|повыш|улучш|improved|gained)',
+            'high_negative': r'(обвал|крах|кризис|коллапс|plummet|crash|collapse)',
+            'moderate_negative': r'(упали|снизил|падение|уменьш|declined|dropped)',
+            'neutral_stable': r'(стабильн|без изменен|остал|remained|stable|flat)'
+        }
+        
+        # Извлечение числовых значений
+        self.number_pattern = r'(\d+(?:,\d+)?(?:\.\d+)?)\s*%'
+        
+    def extract_magnitude(self, text: str) -> Dict[str, float]:
+        """Извлекает информацию о величине изменений"""
+        text_lower = text.lower()
+        
+        # Находим числовые значения
+        numbers = re.findall(self.number_pattern, text_lower)
+        max_number = 0
+        if numbers:
+            try:
+                max_number = max(float(num.replace(',', '.')) for num in numbers)
+            except:
+                max_number = 0
+        
+        # Определяем тип изменения по ключевым словам
+        magnitude_scores = {}
+        for mag_type, pattern in self.magnitude_patterns.items():
+            matches = len(re.findall(pattern, text_lower))
+            magnitude_scores[mag_type] = matches
+            
+        return {
+            'numeric_value': max_number,
+            'magnitude_scores': magnitude_scores,
+            'has_strong_signals': any(score > 0 for key, score in magnitude_scores.items() 
+                                    if 'high_' in key)
+        }
+    
+    def calculate_contextual_score(self, text: str, ml_result: str, ml_confidence: float) -> Tuple[str, float]:
+        """Рассчитывает итоговый скор с учетом контекста"""
+        magnitude_info = self.extract_magnitude(text)
+        
+        # Базовые очки от ML
+        ml_score = {
+            'positive': 1,
+            'negative': -1, 
+            'neutral': 0
+        }.get(ml_result, 0)
+        
+        # Корректировка на основе величины изменений
+        numeric_bonus = 0
+        if magnitude_info['numeric_value'] > 0:
+            if magnitude_info['numeric_value'] >= 10:  # Большие изменения
+                numeric_bonus = 0.5 if ml_score > 0 else -0.5
+            elif magnitude_info['numeric_value'] >= 5:  # Средние изменения
+                numeric_bonus = 0.3 if ml_score > 0 else -0.3
+        
+        # Корректировка на сильные сигналы
+        strong_signal_bonus = 0
+        if magnitude_info['has_strong_signals']:
+            if magnitude_info['magnitude_scores'].get('high_positive', 0) > 0:
+                strong_signal_bonus = 0.7
+            elif magnitude_info['magnitude_scores'].get('high_negative', 0) > 0:
+                strong_signal_bonus = -0.7
+        
+        # Коррекция смещения русской модели к негативу
+        bias_correction = 0
+        if ml_result == 'negative' and ml_confidence < 0.7:
+            # Если ML слабо уверен в негативе, проверяем нейтральные сигналы
+            if magnitude_info['magnitude_scores'].get('neutral_stable', 0) > 0:
+                bias_correction = 0.5  # Сдвигаем к нейтральному
+        
+        # Итоговый скор
+        final_score = ml_score + numeric_bonus + strong_signal_bonus + bias_correction
+        final_confidence = min(1.0, ml_confidence + abs(numeric_bonus) + abs(strong_signal_bonus))
+        
+        # Определяем финальный результат
+        if final_score > 0.3:
+            result = 'positive'
+        elif final_score < -0.3:
+            result = 'negative'
+        else:
+            result = 'neutral'
+            
+        return result, final_confidence
+
+# Глобальный экземпляр анализатора
+_context_analyzer = ContextualSentimentAnalyzer()
 
 @lru_cache(maxsize=2)
 def _load_models():
@@ -84,75 +177,8 @@ def _normalize_sentiment(label: str, model_type: str = "ru") -> str:
         }
         return mapping.get(label, "neutral")
 
-def _is_financial_context(text: str) -> bool:
-    """Определяет, является ли текст финансовой новостью"""
-    financial_keywords = [
-        "акции", "цена", "стоимость", "прибыль", "убыток", "выручка", "доход",
-        "торги", "биржа", "котировки", "капитализация", "дивиденды", "инвестиции",
-        "рынок", "индекс", "волатильность", "ликвидность", "эмиссия"
-    ]
-    return any(keyword in text.lower() for keyword in financial_keywords)
-
-def _rule_based_sentiment_ru(text: str) -> str:
-    """Улучшенный rule-based анализ с весами"""
-    text_lower = text.lower()
-    
-    # Сильные позитивные индикаторы (вес 3) - финансовые термины
-    strong_positive = [
-        "выросли", "рост", "прибыль", "рекорд", "breakthrough", "скачок", "взлет", "бум",
-        "превзош", "превосход", "рекордн", "отличн", "выдающ", "феноменальн"
-    ]
-    # Обычные позитивные (вес 1)
-    positive_words = [
-        "успех", "хорошо", "отлично", "выигр", "плюс", "повыш", "увелич", 
-        "улучш", "позитив", "выгод", "доход", "достиж", "стабильн рост",
-        "положительн", "укрепил", "усилил", "расшир", "развит"
-    ]
-    
-    # Сильные негативные индикаторы (вес 2)
-    strong_negative = ["упали", "падение", "убыток", "кризис", "обвал", "крах", "коллапс"]
-    # Обычные негативные (вес 1)
-    negative_words = [
-        "плохо", "ужасно", "провал", "проигр", "минус", "снизил", "уменьш", 
-        "ухудш", "негатив", "потер", "долг", "катастроф", "спад", "рецесс"
-    ]
-    
-    # Нейтральные индикаторы (вес 1)
-    neutral_words = [
-        "остал", "стабильн", "без изменен", "сохран", "поддерж", "удержал",
-        "на уровне", "в рамках", "соответств", "планов", "ожидан", "прежн", 
-        "неизменн", "статично", "постоянн", "обычн", "средн", "типичн"
-    ]
-    
-    # Подсчитываем взвешенные очки
-    pos_score = (
-        sum(3 for word in strong_positive if word in text_lower) +
-        sum(1 for word in positive_words if word in text_lower)
-    )
-    
-    neg_score = (
-        sum(3 for word in strong_negative if word in text_lower) +
-        sum(1 for word in negative_words if word in text_lower)
-    )
-    
-    neutral_score = sum(1 for word in neutral_words if word in text_lower)
-    
-    # Более агрессивная логика для финансовых новостей
-    if pos_score >= 3:  # Есть сильные позитивные сигналы
-        return "positive"
-    elif neg_score >= 3:  # Есть сильные негативные сигналы
-        return "negative"
-    elif neutral_score > 0 and abs(pos_score - neg_score) <= 1:
-        return "neutral"
-    elif pos_score > neg_score:
-        return "positive"
-    elif neg_score > pos_score:
-        return "negative"
-    else:
-        return "neutral"
-
 def classify_ru(text: str) -> str:
-    """Анализ настроения русского текста с резервными методами"""
+    """Продвинутый анализ настроения русского текста с контекстным пониманием"""
     try:
         ru_tok, ru_mdl, ru_labels, _, _ = _load_models()
         
@@ -167,65 +193,33 @@ def classify_ru(text: str) -> str:
             predicted_label = ru_labels[predicted_idx]
             confidence = probabilities[0][predicted_idx].item()
             
-            print(f"🔍 RU MODEL: '{text[:50]}...'")
-            print(f"📊 Вероятности: {[f'{ru_labels[i]}={probabilities[0][i]:.3f}' for i in range(len(ru_labels))]}")
-            print(f"🎯 Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
+            print(f"🔍 АНАЛИЗ: '{text[:50]}...'")
+            print(f"📊 ML Вероятности: {[f'{ru_labels[i]}={probabilities[0][i]:.3f}' for i in range(len(ru_labels))]}")
+            print(f"🎯 ML Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
             
-            result = _normalize_sentiment(predicted_label, "ru")
+            ml_result = _normalize_sentiment(predicted_label, "ru")
             
-            # Всегда получаем rule-based результат для сравнения
-            rule_result = _rule_based_sentiment_ru(text)
-            print(f"⚡ Rule-based результат: {rule_result}")
+            # Применяем контекстный анализ
+            final_result, final_confidence = _context_analyzer.calculate_contextual_score(
+                text, ml_result, confidence
+            )
             
-            # Улучшенная логика комбинирования с приоритетом rule-based для финансовых терминов:
-            # 1. Если rule-based нашел сильные финансовые сигналы, доверяем ему
-            # 2. Если ML очень уверен (>0.8), используем ML
-            # 3. Если есть согласие между ML и rule-based, используем его
-            # 4. При низкой уверенности ML (<0.6), предпочитаем rule-based
-            # 5. При конфликте предпочитаем rule-based для финансовых новостей
+            print(f"🧠 Контекстная коррекция: {ml_result} → {final_result} (финальная уверенность: {final_confidence:.3f})")
+            print(f"✅ Финальный результат: {final_result}")
             
-            # Проверяем наличие сильных финансовых терминов
-            has_strong_financial = any(word in text.lower() for word in 
-                ["выросли", "прибыль", "рекорд", "превзош", "упали", "убыток", "кризис"])
-            
-            if has_strong_financial and rule_result != "neutral":
-                print(f"💰 Найдены сильные финансовые термины, используем rule-based: {rule_result}")
-                result = rule_result
-            elif confidence > 0.8:
-                print(f"🎯 Очень высокая уверенность ML ({confidence:.3f}), используем: {result}")
-            elif rule_result == result:
-                print(f"🤝 ML и rule-based согласны: {result}")
-            elif confidence < 0.6:
-                print(f"🔄 Низкая уверенность ML ({confidence:.3f}), используем rule-based: {rule_result}")
-                result = rule_result
-            elif rule_result != "neutral" and result == "neutral":
-                # Приоритет rule-based при обнаружении сигналов
-                print(f"🎯 Rule-based видит сигнал ({rule_result}), ML нейтральный - используем rule-based")
-                result = rule_result
-            elif rule_result != "neutral" and result != "neutral" and rule_result != result:
-                # При конфликте разных сигналов используем rule-based для финансовых новостей
-                print(f"⚖️ Конфликт сигналов: ML={result}, rule={rule_result}, приоритет rule-based")
-                result = rule_result
-            else:
-                print(f"🎯 ML видит сигнал ({result}) при средней уверенности - используем ML")
-            
-            print(f"✅ Финальный результат: {result}")
-            return result
+            return final_result
         
-        # Если модель не загружена, используем rule-based
+        # Если модель не загружена, используем базовый анализ
         else:
-            print(f"🔄 Используем rule-based анализ для: '{text[:50]}...'")
-            result = _rule_based_sentiment_ru(text)
-            print(f"✅ Rule-based результат: {result}")
-            return result
+            print(f"🔄 Используем базовый анализ для: '{text[:50]}...'")
+            return "neutral"
             
     except Exception as e:
-        print(f"⚠️ Ошибка анализа русского текста: {e}")
-        # Резервный rule-based анализ
-        return _rule_based_sentiment_ru(text)
+        print(f"⚠️ Ошибка анализа: {e}")
+        return "neutral"
 
 def classify_en(text: str) -> str:
-    """Анализ настроения английского текста"""
+    """Анализ настроения английского текста с контекстным пониманием"""
     try:
         _, _, _, en_tok, en_mdl = _load_models()
         if en_tok is None or en_mdl is None:
@@ -240,13 +234,21 @@ def classify_en(text: str) -> str:
         predicted_label = EN_LABELS[predicted_idx]
         confidence = probabilities[0][predicted_idx].item()
         
-        print(f"🔍 EN DEBUG: '{text[:50]}...'")
+        print(f"🔍 EN АНАЛИЗ: '{text[:50]}...'")
         print(f"📊 Вероятности: {[f'{EN_LABELS[i]}={probabilities[0][i]:.3f}' for i in range(len(EN_LABELS))]}")
         print(f"🎯 Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
         
-        result = _normalize_sentiment(predicted_label, "en")
-        print(f"✅ Финальный результат: {result}")
-        return result
+        ml_result = _normalize_sentiment(predicted_label, "en")
+        
+        # Применяем контекстный анализ
+        final_result, final_confidence = _context_analyzer.calculate_contextual_score(
+            text, ml_result, confidence
+        )
+        
+        print(f"🧠 Контекстная коррекция: {ml_result} → {final_result}")
+        print(f"✅ Финальный результат: {final_result}")
+        
+        return final_result
     except Exception as e:
         print(f"⚠️ Ошибка анализа английского текста: {e}")
         return "neutral"
@@ -265,7 +267,34 @@ def classify_multi(text: str) -> str:
         # Если язык не определился, пробуем английский
         return classify_en(text)
 
-# Старая функция для совместимости
+def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
+    """Анализирует тренд настроения по множеству текстов"""
+    if not texts:
+        return {'trend': 0.0, 'confidence': 0.0, 'count': 0}
+    
+    sentiments = []
+    for text in texts:
+        sentiment = classify_multi(text)
+        score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(sentiment, 0)
+        sentiments.append(score)
+    
+    avg_sentiment = sum(sentiments) / len(sentiments)
+    
+    # Рассчитываем уверенность на основе согласованности
+    consistency = 1.0 - (len(set(sentiments)) - 1) / 2.0  # от 0 до 1
+    
+    return {
+        'trend': avg_sentiment,
+        'confidence': consistency,
+        'count': len(texts),
+        'distribution': {
+            'positive': sentiments.count(1),
+            'negative': sentiments.count(-1),
+            'neutral': sentiments.count(0)
+        }
+    }
+
+# Старые функции для совместимости
 def classify(text: str) -> str:
     """Обратная совместимость - анализ русского текста"""
     return classify_ru(text)
