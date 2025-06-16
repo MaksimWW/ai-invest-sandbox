@@ -241,6 +241,53 @@ def classify_en_ensemble(text: str) -> str:
     """Классифицирует английский текст с помощью ensemble моделей"""
     return _ensemble_classify(text, MODEL_CONFIG["en_models"])
 
+def _extract_financial_signals(text: str) -> Dict[str, float]:
+    """Извлекает финансовые сигналы из текста (глобальная функция)"""
+    financial_terms = {
+        'strong_positive': {
+            'ru': ['рекорд', 'взлет', 'скачок', 'бум', 'превзош', 'прорыв', 'резкий рост'],
+            'en': ['breakthrough', 'surge', 'soar', 'rally', 'boom', 'outperform', 'beat']
+        },
+        'moderate_positive': {
+            'ru': ['выросли', 'рост', 'увелич', 'повыш', 'улучш', 'прибыль', 'доход'],
+            'en': ['improved', 'gained', 'rise', 'increase', 'profit', 'earnings', 'revenue']
+        },
+        'strong_negative': {
+            'ru': ['обвал', 'крах', 'кризис', 'коллапс', 'катастроф', 'провал'],
+            'en': ['plummet', 'crash', 'collapse', 'crisis', 'catastrophe', 'disaster']
+        },
+        'moderate_negative': {
+            'ru': ['упали', 'снизил', 'падение', 'уменьш', 'убыт', 'потер'],
+            'en': ['declined', 'dropped', 'fell', 'loss', 'decrease', 'down']
+        },
+        'neutral_stable': {
+            'ru': ['стабильн', 'без изменен', 'остал', 'неизменн'],
+            'en': ['remained', 'stable', 'flat', 'unchanged', 'steady']
+        }
+    }
+
+    text_lower = text.lower()
+    signals = {'positive': 0, 'negative': 0, 'neutral': 0}
+    
+    # Определяем язык (простая эвристика)
+    lang = 'ru' if any(char in 'абвгдежзийклмнопрстуфхцчшщъыьэюя' for char in text_lower[:50]) else 'en'
+
+    # Проверяем финансовые термины
+    for sentiment_type, terms_dict in financial_terms.items():
+        if lang in terms_dict:
+            for term in terms_dict[lang]:
+                if term in text_lower:
+                    if 'positive' in sentiment_type:
+                        weight = 2.0 if 'strong' in sentiment_type else 1.0
+                        signals['positive'] += weight
+                    elif 'negative' in sentiment_type:
+                        weight = 2.0 if 'strong' in sentiment_type else 1.0
+                        signals['negative'] += weight
+                    else:  # neutral
+                        signals['neutral'] += 1.0
+
+    return signals
+
 def _ensemble_classify(text: str, models_config: list) -> str:
     """Выполняет ensemble предсказание с несколькими моделями"""
     predictions = []
@@ -251,9 +298,17 @@ def _ensemble_classify(text: str, models_config: list) -> str:
 
     for model_info in active_models:
         try:
-            # Пробуем загрузить и использовать модель
-            tokenizer = AutoTokenizer.from_pretrained(model_info["name"])
-            model = AutoModelForSequenceClassification.from_pretrained(model_info["name"])
+            # Пробуем загрузить и использовать модель с кэшированием
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_info["name"], 
+                cache_dir=".model_cache",
+                local_files_only=False
+            )
+            model = AutoModelForSequenceClassification.from_pretrained(
+                model_info["name"],
+                cache_dir=".model_cache", 
+                local_files_only=False
+            )
             model.eval()
 
             inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
@@ -358,11 +413,15 @@ def classify(text: str) -> str:
 RSS_FEEDS = [
     "https://www.rbc.ru/rss/finances.rss",
     "https://www.vedomosti.ru/rss/news",
-    "https://lenta.ru/rss/finances",
+    "https://lenta.ru/rss/finances", 
     "https://ria.ru/export/rss2/economy/index.xml",
     "https://www.interfax.ru/rss.asp?sec=business",
     "https://www.kommersant.ru/RSS/main.xml",
     "https://quote.rbc.ru/news/rss/",
+    # Дополнительные источники
+    "https://tass.ru/rss/v2.xml",
+    "https://www.finam.ru/international/advanced/rsspoint/",
+    "https://1prime.ru/export/rss2/index.xml"
 ]
 
 def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
@@ -390,7 +449,9 @@ def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
 
     for rss_url in RSS_FEEDS:
         try:
-            response = requests.get(rss_url, timeout=10)
+            response = requests.get(rss_url, timeout=15, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
             response.raise_for_status()
 
             # Парсим XML
@@ -400,6 +461,7 @@ def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
             # Находим все элементы item
             items = root.findall('.//item')
 
+            source_count = 0
             for item in items:
                 title_elem = item.find('title')
                 if title_elem is not None and title_elem.text:
@@ -409,10 +471,18 @@ def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
                     title_upper = title.upper()
                     if any(term.upper() in title_upper for term in search_terms):
                         all_news.append(title)
+                        source_count += 1
                         print(f"✅ Найдена новость: {title[:80]}...")
 
+            if source_count > 0:
+                print(f"📰 Источник {rss_url.split('/')[2]}: {source_count} новостей")
+
+        except requests.exceptions.Timeout:
+            print(f"⏰ Таймаут: {rss_url.split('/')[2]}")
+        except requests.exceptions.ConnectionError:
+            print(f"🌐 Недоступен: {rss_url.split('/')[2]}")
         except Exception as e:
-            print(f"⚠️ RSS недоступен: {rss_url[:50]}...")
+            print(f"⚠️ Ошибка {rss_url.split('/')[2]}: {type(e).__name__}")
             continue
 
     print(f"📊 Итого найдено новостей для {ticker}: {len(all_news)}")
