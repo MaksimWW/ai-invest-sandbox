@@ -5,109 +5,276 @@ import torch, requests, datetime as dt, re
 from news_feed import fetch_news
 from langdetect import detect
 import warnings
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
+import statistics
 
 # Подавляем предупреждения о неиспользуемых весах модели
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
 
-# Модели для русского языка (в порядке предпочтения)
-RU_MODELS = [
-    {
-        "name": "seara/rubert-base-cased-russian-sentiment",
-        "labels": ["NEGATIVE", "NEUTRAL", "POSITIVE"]
-    },
-    {
-        "name": "sismetanin/rubert-ru-sentiment-rusentiment",
-        "labels": ["NEGATIVE", "NEUTRAL", "POSITIVE"]
-    },
-    {
-        "name": "blanchefort/rubert-base-cased-sentiment",
-        "labels": ["NEUTRAL", "POSITIVE", "NEGATIVE"]
-    }
-]
+# Конфигурация моделей для ensemble
+MODEL_CONFIG = {
+    "ru_models": [
+        {
+            "name": "seara/rubert-base-cased-russian-sentiment",
+            "labels": ["NEGATIVE", "NEUTRAL", "POSITIVE"],
+            "weight": 0.3,
+            "description": "RuBERT специализированный"
+        },
+        {
+            "name": "blanchefort/rubert-base-cased-sentiment",
+            "labels": ["NEUTRAL", "POSITIVE", "NEGATIVE"],
+            "weight": 0.25,
+            "description": "RuBERT базовый"
+        },
+        {
+            "name": "nlptown/bert-base-multilingual-uncased-sentiment",
+            "labels": ["1", "2", "3", "4", "5"],  # 1-2=negative, 3=neutral, 4-5=positive
+            "weight": 0.45,
+            "description": "Мультиязычная модель (приоритетная)"
+        }
+    ],
+    "en_models": [
+        {
+            "name": "ProsusAI/finbert",
+            "labels": ["positive", "negative", "neutral"],
+            "weight": 0.6,
+            "description": "FinBERT специально для финансов"
+        },
+        {
+            "name": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "labels": ["LABEL_0", "LABEL_1", "LABEL_2"],
+            "weight": 0.4,
+            "description": "Twitter RoBERTa"
+        }
+    ]
+}
 
-# Английская модель для финансовых новостей
-EN_MODEL_NAME = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-EN_LABELS = ["LABEL_0", "LABEL_1", "LABEL_2"]  # negative, neutral, positive
-
-class ContextualSentimentAnalyzer:
-    """Композитный анализатор с пониманием контекста"""
+class FinancialSentimentEnsemble:
+    """Ensemble анализатор с несколькими моделями и финансовой логикой"""
     
     def __init__(self):
-        self.magnitude_patterns = {
-            'high_positive': r'(рекорд|взлет|скачок|бум|превзош|breakthrough|surge)',
-            'moderate_positive': r'(выросли|рост|увелич|повыш|улучш|improved|gained)',
-            'high_negative': r'(обвал|крах|кризис|коллапс|plummet|crash|collapse)',
-            'moderate_negative': r'(упали|снизил|падение|уменьш|declined|dropped)',
-            'neutral_stable': r'(стабильн|без изменен|остал|remained|stable|flat)'
+        # Финансовые словари
+        self.financial_terms = {
+            'strong_positive': {
+                'ru': ['рекорд', 'взлет', 'скачок', 'бум', 'превзош', 'прорыв', 'резкий рост'],
+                'en': ['breakthrough', 'surge', 'soar', 'rally', 'boom', 'outperform', 'beat']
+            },
+            'moderate_positive': {
+                'ru': ['выросли', 'рост', 'увелич', 'повыш', 'улучш', 'прибыль', 'доход'],
+                'en': ['improved', 'gained', 'rise', 'increase', 'profit', 'earnings', 'revenue']
+            },
+            'strong_negative': {
+                'ru': ['обвал', 'крах', 'кризис', 'коллапс', 'катастроф', 'провал'],
+                'en': ['plummet', 'crash', 'collapse', 'crisis', 'catastrophe', 'disaster']
+            },
+            'moderate_negative': {
+                'ru': ['упали', 'снизил', 'падение', 'уменьш', 'убыт', 'потер'],
+                'en': ['declined', 'dropped', 'fell', 'loss', 'decrease', 'down']
+            },
+            'neutral_stable': {
+                'ru': ['стабильн', 'без изменен', 'остал', 'неизменн'],
+                'en': ['remained', 'stable', 'flat', 'unchanged', 'steady']
+            }
         }
         
-        # Извлечение числовых значений
+        # Паттерны для числовых значений
         self.number_pattern = r'(\d+(?:,\d+)?(?:\.\d+)?)\s*%'
         
-    def extract_magnitude(self, text: str) -> Dict[str, float]:
-        """Извлекает информацию о величине изменений"""
+        # Весовые коэффициенты для разных источников сигналов
+        self.weights = {
+            'ml_ensemble': 0.5,      # Вес ML-ансамбля
+            'financial_terms': 0.3,   # Вес финансовых терминов
+            'numeric_context': 0.2    # Вес числового контекста
+        }
+    
+    def _normalize_multilingual_sentiment(self, label: str, model_name: str) -> str:
+        """Нормализует метки разных моделей к единому формату"""
+        if "nlptown" in model_name:
+            # Мультиязычная модель: 1-2=negative, 3=neutral, 4-5=positive
+            if label in ["1", "2"]:
+                return "negative"
+            elif label == "3":
+                return "neutral"
+            elif label in ["4", "5"]:
+                return "positive"
+        elif "finbert" in model_name.lower():
+            # FinBERT уже возвращает правильные метки
+            return label.lower()
+        elif "twitter" in model_name or "cardiff" in model_name:
+            # Twitter RoBERTa
+            mapping = {"LABEL_0": "negative", "LABEL_1": "neutral", "LABEL_2": "positive"}
+            return mapping.get(label, "neutral")
+        else:
+            # Стандартные RuBERT модели
+            label_upper = label.upper()
+            if "NEGATIVE" in label_upper or "NEG" in label_upper:
+                return "negative"
+            elif "POSITIVE" in label_upper or "POS" in label_upper:
+                return "positive"
+            else:
+                return "neutral"
+    
+    def _extract_financial_signals(self, text: str, lang: str) -> Dict[str, float]:
+        """Извлекает финансовые сигналы из текста"""
         text_lower = text.lower()
+        signals = {'positive': 0, 'negative': 0, 'neutral': 0}
         
-        # Находим числовые значения
-        numbers = re.findall(self.number_pattern, text_lower)
-        max_number = 0
+        # Проверяем финансовые термины
+        for sentiment_type, terms_dict in self.financial_terms.items():
+            if lang in terms_dict:
+                for term in terms_dict[lang]:
+                    if term in text_lower:
+                        if 'positive' in sentiment_type:
+                            weight = 2.0 if 'strong' in sentiment_type else 1.0
+                            signals['positive'] += weight
+                        elif 'negative' in sentiment_type:
+                            weight = 2.0 if 'strong' in sentiment_type else 1.0
+                            signals['negative'] += weight
+                        else:  # neutral
+                            signals['neutral'] += 1.0
+        
+        return signals
+    
+    def _extract_numeric_context(self, text: str) -> Dict[str, float]:
+        """Анализирует числовой контекст (проценты, суммы)"""
+        context = {'magnitude': 0, 'direction': 0}  # direction: +1=рост, -1=падение
+        
+        # Ищем проценты
+        numbers = re.findall(self.number_pattern, text.lower())
         if numbers:
             try:
                 max_number = max(float(num.replace(',', '.')) for num in numbers)
-            except:
-                max_number = 0
+                context['magnitude'] = max_number
+                
+                # Определяем направление по контексту
+                growth_words = ['выросли', 'рост', 'увелич', 'повыш', 'gained', 'rise', 'up']
+                decline_words = ['упали', 'снизил', 'падение', 'уменьш', 'declined', 'dropped', 'down']
+                
+                text_lower = text.lower()
+                if any(word in text_lower for word in growth_words):
+                    context['direction'] = 1
+                elif any(word in text_lower for word in decline_words):
+                    context['direction'] = -1
+                    
+            except ValueError:
+                pass
         
-        # Определяем тип изменения по ключевым словам
-        magnitude_scores = {}
-        for mag_type, pattern in self.magnitude_patterns.items():
-            matches = len(re.findall(pattern, text_lower))
-            magnitude_scores[mag_type] = matches
-            
-        return {
-            'numeric_value': max_number,
-            'magnitude_scores': magnitude_scores,
-            'has_strong_signals': any(score > 0 for key, score in magnitude_scores.items() 
-                                    if 'high_' in key)
-        }
+        return context
     
-    def calculate_contextual_score(self, text: str, ml_result: str, ml_confidence: float) -> Tuple[str, float]:
-        """Рассчитывает итоговый скор с учетом контекста"""
-        magnitude_info = self.extract_magnitude(text)
+    def _ensemble_predict(self, text: str, models_config: List[Dict], lang: str = "ru") -> Dict[str, float]:
+        """Выполняет ensemble предсказание с несколькими моделями"""
+        predictions = []
+        total_weight = 0
         
-        # Базовые очки от ML
-        ml_score = {
-            'positive': 1,
-            'negative': -1, 
-            'neutral': 0
-        }.get(ml_result, 0)
+        for model_info in models_config:
+            try:
+                # Пробуем загрузить и использовать модель
+                tokenizer = AutoTokenizer.from_pretrained(model_info["name"])
+                model = AutoModelForSequenceClassification.from_pretrained(model_info["name"])
+                model.eval()
+                
+                inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+                with torch.no_grad():
+                    logits = model(**inputs).logits
+                
+                probabilities = torch.softmax(logits, dim=-1)
+                predicted_idx = logits.argmax().item()
+                predicted_label = model_info["labels"][predicted_idx]
+                confidence = probabilities[0][predicted_idx].item()
+                
+                # Нормализуем результат
+                normalized_sentiment = self._normalize_multilingual_sentiment(predicted_label, model_info["name"])
+                
+                predictions.append({
+                    'sentiment': normalized_sentiment,
+                    'confidence': confidence,
+                    'weight': model_info["weight"],
+                    'model': model_info["description"]
+                })
+                total_weight += model_info["weight"]
+                
+                print(f"🤖 {model_info['description']}: {normalized_sentiment} (conf: {confidence:.3f})")
+                
+            except Exception as e:
+                print(f"⚠️ Ошибка модели {model_info['name']}: {e}")
+                continue
         
-        # Корректировка на основе величины изменений
-        numeric_bonus = 0
-        if magnitude_info['numeric_value'] > 0:
-            if magnitude_info['numeric_value'] >= 10:  # Большие изменения
-                numeric_bonus = 0.5 if ml_score > 0 else -0.5
-            elif magnitude_info['numeric_value'] >= 5:  # Средние изменения
-                numeric_bonus = 0.3 if ml_score > 0 else -0.3
+        # Вычисляем взвешенный результат
+        if not predictions:
+            return {'sentiment': 'neutral', 'confidence': 0.0, 'details': []}
         
-        # Корректировка на сильные сигналы
-        strong_signal_bonus = 0
-        if magnitude_info['has_strong_signals']:
-            if magnitude_info['magnitude_scores'].get('high_positive', 0) > 0:
-                strong_signal_bonus = 0.7
-            elif magnitude_info['magnitude_scores'].get('high_negative', 0) > 0:
-                strong_signal_bonus = -0.7
+        # Агрегируем результаты
+        weighted_scores = {'positive': 0, 'negative': 0, 'neutral': 0}
+        total_confidence = 0
         
-        # Коррекция смещения русской модели к негативу
-        bias_correction = 0
-        if ml_result == 'negative' and ml_confidence < 0.7:
-            # Если ML слабо уверен в негативе, проверяем нейтральные сигналы
-            if magnitude_info['magnitude_scores'].get('neutral_stable', 0) > 0:
-                bias_correction = 0.5  # Сдвигаем к нейтральному
+        for pred in predictions:
+            weight_norm = pred['weight'] / total_weight
+            weighted_scores[pred['sentiment']] += weight_norm * pred['confidence']
+            total_confidence += weight_norm * pred['confidence']
         
-        # Итоговый скор
-        final_score = ml_score + numeric_bonus + strong_signal_bonus + bias_correction
-        final_confidence = min(1.0, ml_confidence + abs(numeric_bonus) + abs(strong_signal_bonus))
+        # Определяем финальный результат
+        final_sentiment = max(weighted_scores, key=weighted_scores.get)
+        final_confidence = total_confidence / len(predictions)
+        
+        return {
+            'sentiment': final_sentiment,
+            'confidence': final_confidence,
+            'details': predictions,
+            'scores': weighted_scores
+        }
+
+# Глобальный экземпляр ensemble анализатора
+_ensemble_analyzer = FinancialSentimentEnsemble()
+
+@lru_cache(maxsize=10)
+def _load_ensemble_models():
+    """Кэшированная загрузка моделей для ensemble"""
+    print("🔄 Инициализация ensemble моделей...")
+    return True  # Модели загружаются динамически в _ensemble_predict
+
+def classify_ru_ensemble(text: str) -> str:
+    """Ensemble анализ русского текста с несколькими моделями"""
+    print(f"🧠 ENSEMBLE АНАЛИЗ RU: '{text[:50]}...'")
+    print("=" * 60)
+    
+    try:
+        # 1. ML Ensemble
+        ml_result = _ensemble_analyzer._ensemble_predict(
+            text, MODEL_CONFIG["ru_models"], "ru"
+        )
+        print(f"🤖 ML Ensemble: {ml_result['sentiment']} (conf: {ml_result['confidence']:.3f})")
+        
+        # 2. Финансовые термины
+        financial_signals = _ensemble_analyzer._extract_financial_signals(text, "ru")
+        print(f"💰 Финансовые сигналы: {financial_signals}")
+        
+        # 3. Числовой контекст
+        numeric_context = _ensemble_analyzer._extract_numeric_context(text)
+        print(f"🔢 Числовой контекст: {numeric_context}")
+        
+        # 4. Комбинируем результаты
+        final_score = 0
+        
+        # ML вклад
+        ml_score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(ml_result['sentiment'], 0)
+        final_score += ml_score * _ensemble_analyzer.weights['ml_ensemble'] * ml_result['confidence']
+        
+        # Финансовые термины
+        if financial_signals['positive'] > financial_signals['negative']:
+            term_score = min(1.0, financial_signals['positive'] / 3.0)
+        elif financial_signals['negative'] > financial_signals['positive']:
+            term_score = -min(1.0, financial_signals['negative'] / 3.0)
+        else:
+            term_score = 0
+        
+        final_score += term_score * _ensemble_analyzer.weights['financial_terms']
+        
+        # Числовой контекст
+        if numeric_context['magnitude'] > 0:
+            magnitude_weight = min(1.0, numeric_context['magnitude'] / 10.0)  # нормализуем к 1.0
+            numeric_score = numeric_context['direction'] * magnitude_weight
+            final_score += numeric_score * _ensemble_analyzer.weights['numeric_context']
+            print(f"📊 Числовой вклад: {numeric_score:.3f} (направление: {numeric_context['direction']}, величина: {numeric_context['magnitude']}%)")
         
         # Определяем финальный результат
         if final_score > 0.3:
@@ -116,156 +283,97 @@ class ContextualSentimentAnalyzer:
             result = 'negative'
         else:
             result = 'neutral'
-            
-        return result, final_confidence
-
-# Глобальный экземпляр анализатора
-_context_analyzer = ContextualSentimentAnalyzer()
-
-@lru_cache(maxsize=2)
-def _load_models():
-    """Загружает модели с обработкой ошибок и резервными вариантами"""
-    ru_tok, ru_mdl, ru_labels = None, None, None
-    
-    # Пробуем русские модели по очереди
-    for model_info in RU_MODELS:
-        try:
-            print(f"🔄 Пробуем русскую модель: {model_info['name']}")
-            ru_tok = AutoTokenizer.from_pretrained(model_info["name"])
-            ru_mdl = AutoModelForSequenceClassification.from_pretrained(model_info["name"])
-            ru_mdl.eval()
-            ru_labels = model_info["labels"]
-            print(f"✅ Русская модель загружена: {model_info['name']}")
-            break
-        except Exception as e:
-            print(f"⚠️ Ошибка загрузки {model_info['name']}: {e}")
-            continue
-    
-    if ru_tok is None:
-        print("❌ Не удалось загрузить ни одну русскую модель")
-
-    try:
-        # Английская модель
-        print("🔄 Загружаем английскую модель...")
-        en_tok = AutoTokenizer.from_pretrained(EN_MODEL_NAME)
-        en_mdl = AutoModelForSequenceClassification.from_pretrained(EN_MODEL_NAME)
-        en_mdl.eval()
-        print("✅ Английская модель загружена")
-    except Exception as e:
-        print(f"❌ Ошибка загрузки английской модели: {e}")
-        en_tok, en_mdl = None, None
-
-    return ru_tok, ru_mdl, ru_labels, en_tok, en_mdl
-
-def _normalize_sentiment(label: str, model_type: str = "ru") -> str:
-    """Нормализует метки настроения к единому формату"""
-    if model_type == "ru":
-        # Для русских моделей
-        label_upper = label.upper()
-        if "NEGATIVE" in label_upper or "NEG" in label_upper:
-            return "negative"
-        elif "POSITIVE" in label_upper or "POS" in label_upper:
-            return "positive"
-        else:
-            return "neutral"
-    else:
-        # Для английской модели (Twitter RoBERTa)
-        mapping = {
-            "LABEL_0": "negative",  # negative
-            "LABEL_1": "neutral",   # neutral
-            "LABEL_2": "positive"   # positive
-        }
-        return mapping.get(label, "neutral")
-
-def classify_ru(text: str) -> str:
-    """Продвинутый анализ настроения русского текста с контекстным пониманием"""
-    try:
-        ru_tok, ru_mdl, ru_labels, _, _ = _load_models()
         
-        # Если модель загружена, используем её
-        if ru_tok is not None and ru_mdl is not None:
-            inputs = ru_tok(text, return_tensors="pt", truncation=True, max_length=512)
-            with torch.no_grad():
-                logits = ru_mdl(**inputs).logits
-            
-            probabilities = torch.softmax(logits, dim=-1)
-            predicted_idx = logits.argmax().item()
-            predicted_label = ru_labels[predicted_idx]
-            confidence = probabilities[0][predicted_idx].item()
-            
-            print(f"🔍 АНАЛИЗ: '{text[:50]}...'")
-            print(f"📊 ML Вероятности: {[f'{ru_labels[i]}={probabilities[0][i]:.3f}' for i in range(len(ru_labels))]}")
-            print(f"🎯 ML Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
-            
-            ml_result = _normalize_sentiment(predicted_label, "ru")
-            
-            # Применяем контекстный анализ
-            final_result, final_confidence = _context_analyzer.calculate_contextual_score(
-                text, ml_result, confidence
-            )
-            
-            print(f"🧠 Контекстная коррекция: {ml_result} → {final_result} (финальная уверенность: {final_confidence:.3f})")
-            print(f"✅ Финальный результат: {final_result}")
-            
-            return final_result
+        print(f"🎯 Финальный скор: {final_score:.3f} → {result}")
+        print("=" * 60)
         
-        # Если модель не загружена, используем базовый анализ
-        else:
-            print(f"🔄 Используем базовый анализ для: '{text[:50]}...'")
-            return "neutral"
-            
+        return result
+        
     except Exception as e:
-        print(f"⚠️ Ошибка анализа: {e}")
+        print(f"⚠️ Ошибка ensemble анализа: {e}")
         return "neutral"
+
+def classify_en_ensemble(text: str) -> str:
+    """Ensemble анализ английского текста с FinBERT и RoBERTa"""
+    print(f"🧠 ENSEMBLE АНАЛИЗ EN: '{text[:50]}...'")
+    print("=" * 60)
+    
+    try:
+        # ML Ensemble для английского
+        ml_result = _ensemble_analyzer._ensemble_predict(
+            text, MODEL_CONFIG["en_models"], "en"
+        )
+        print(f"🤖 ML Ensemble: {ml_result['sentiment']} (conf: {ml_result['confidence']:.3f})")
+        
+        # Финансовые термины
+        financial_signals = _ensemble_analyzer._extract_financial_signals(text, "en")
+        print(f"💰 Финансовые сигналы: {financial_signals}")
+        
+        # Числовой контекст
+        numeric_context = _ensemble_analyzer._extract_numeric_context(text)
+        print(f"🔢 Числовой контекст: {numeric_context}")
+        
+        # Для английского больше доверяем ML (особенно FinBERT)
+        weights_en = {'ml_ensemble': 0.7, 'financial_terms': 0.2, 'numeric_context': 0.1}
+        
+        final_score = 0
+        
+        # ML вклад (больший вес для английского)
+        ml_score = {'positive': 1, 'negative': -1, 'neutral': 0}.get(ml_result['sentiment'], 0)
+        final_score += ml_score * weights_en['ml_ensemble'] * ml_result['confidence']
+        
+        # Остальная логика аналогична русскому
+        if financial_signals['positive'] > financial_signals['negative']:
+            term_score = min(1.0, financial_signals['positive'] / 3.0)
+        elif financial_signals['negative'] > financial_signals['positive']:
+            term_score = -min(1.0, financial_signals['negative'] / 3.0)
+        else:
+            term_score = 0
+        
+        final_score += term_score * weights_en['financial_terms']
+        
+        if numeric_context['magnitude'] > 0:
+            magnitude_weight = min(1.0, numeric_context['magnitude'] / 10.0)
+            numeric_score = numeric_context['direction'] * magnitude_weight
+            final_score += numeric_score * weights_en['numeric_context']
+        
+        # Определяем результат
+        if final_score > 0.2:  # Меньший порог для английского
+            result = 'positive'
+        elif final_score < -0.2:
+            result = 'negative'
+        else:
+            result = 'neutral'
+        
+        print(f"🎯 Финальный скор: {final_score:.3f} → {result}")
+        print("=" * 60)
+        
+        return result
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка ensemble анализа: {e}")
+        return "neutral"
+
+# Основные функции с ensemble подходом
+def classify_ru(text: str) -> str:
+    """Главная функция для анализа русского текста"""
+    return classify_ru_ensemble(text)
 
 def classify_en(text: str) -> str:
-    """Анализ настроения английского текста с контекстным пониманием"""
-    try:
-        _, _, _, en_tok, en_mdl = _load_models()
-        if en_tok is None or en_mdl is None:
-            return "neutral"
-        
-        inputs = en_tok(text, return_tensors="pt", truncation=True, max_length=512)
-        with torch.no_grad():
-            logits = en_mdl(**inputs).logits
-        
-        probabilities = torch.softmax(logits, dim=-1)
-        predicted_idx = logits.argmax().item()
-        predicted_label = EN_LABELS[predicted_idx]
-        confidence = probabilities[0][predicted_idx].item()
-        
-        print(f"🔍 EN АНАЛИЗ: '{text[:50]}...'")
-        print(f"📊 Вероятности: {[f'{EN_LABELS[i]}={probabilities[0][i]:.3f}' for i in range(len(EN_LABELS))]}")
-        print(f"🎯 Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
-        
-        ml_result = _normalize_sentiment(predicted_label, "en")
-        
-        # Применяем контекстный анализ
-        final_result, final_confidence = _context_analyzer.calculate_contextual_score(
-            text, ml_result, confidence
-        )
-        
-        print(f"🧠 Контекстная коррекция: {ml_result} → {final_result}")
-        print(f"✅ Финальный результат: {final_result}")
-        
-        return final_result
-    except Exception as e:
-        print(f"⚠️ Ошибка анализа английского текста: {e}")
-        return "neutral"
+    """Главная функция для анализа английского текста"""
+    return classify_en_ensemble(text)
 
 def classify_multi(text: str) -> str:
-    """Мультиязычный анализ настроения"""
+    """Мультиязычный анализ настроения с ensemble"""
     try:
-        # Определяем язык
         lang = detect(text[:200])
         if lang == "ru":
-            return classify_ru(text)
+            return classify_ru_ensemble(text)
         else:
-            return classify_en(text)
+            return classify_en_ensemble(text)
     except Exception as e:
         print(f"⚠️ Ошибка определения языка: {e}")
-        # Если язык не определился, пробуем английский
-        return classify_en(text)
+        return classify_en_ensemble(text)
 
 def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
     """Анализирует тренд настроения по множеству текстов"""
@@ -279,9 +387,7 @@ def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
         sentiments.append(score)
     
     avg_sentiment = sum(sentiments) / len(sentiments)
-    
-    # Рассчитываем уверенность на основе согласованности
-    consistency = 1.0 - (len(set(sentiments)) - 1) / 2.0  # от 0 до 1
+    consistency = 1.0 - (len(set(sentiments)) - 1) / 2.0
     
     return {
         'trend': avg_sentiment,
@@ -294,12 +400,11 @@ def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
         }
     }
 
-# Старые функции для совместимости
+# Обратная совместимость
 def classify(text: str) -> str:
-    """Обратная совместимость - анализ русского текста"""
     return classify_ru(text)
 
-# --- RSS-граббер с несколькими источниками ---
+# RSS-граббер (без изменений)
 RSS_FEEDS = [
     "https://tass.ru/rss/v2.xml",
     "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
@@ -323,7 +428,5 @@ def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
             continue
     return found
 
-# Для обратной совместимости
 def latest_news(ticker: str, hours: int = 24) -> list[str]:
-    """Обратная совместимость - русские новости"""
     return latest_news_ru(ticker, hours)
