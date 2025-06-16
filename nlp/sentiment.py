@@ -74,8 +74,19 @@ def classify_ru(text: str) -> str:
         with torch.no_grad():
             logits = ru_mdl(**inputs).logits
         
-        predicted_label = RU_LABELS[logits.argmax().item()]
-        return _normalize_sentiment(predicted_label, "ru")
+        # Добавляем отладку
+        probabilities = torch.softmax(logits, dim=-1)
+        predicted_idx = logits.argmax().item()
+        predicted_label = RU_LABELS[predicted_idx]
+        confidence = probabilities[0][predicted_idx].item()
+        
+        print(f"🔍 RU DEBUG: '{text[:50]}...'")
+        print(f"📊 Вероятности: {[f'{RU_LABELS[i]}={probabilities[0][i]:.3f}' for i in range(len(RU_LABELS))]}")
+        print(f"🎯 Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
+        
+        result = _normalize_sentiment(predicted_label, "ru")
+        print(f"✅ Финальный результат: {result}")
+        return result
     except Exception as e:
         print(f"⚠️ Ошибка анализа русского текста: {e}")
         return "neutral"
@@ -91,8 +102,19 @@ def classify_en(text: str) -> str:
         with torch.no_grad():
             logits = en_mdl(**inputs).logits
         
-        predicted_label = EN_LABELS[logits.argmax().item()]
-        return _normalize_sentiment(predicted_label, "en")
+        # Добавляем отладку
+        probabilities = torch.softmax(logits, dim=-1)
+        predicted_idx = logits.argmax().item()
+        predicted_label = EN_LABELS[predicted_idx]
+        confidence = probabilities[0][predicted_idx].item()
+        
+        print(f"🔍 EN DEBUG: '{text[:50]}...'")
+        print(f"📊 Вероятности: {[f'{EN_LABELS[i]}={probabilities[0][i]:.3f}' for i in range(len(EN_LABELS))]}")
+        print(f"🎯 Предсказание: {predicted_label} (уверенность: {confidence:.3f})")
+        
+        result = _normalize_sentiment(predicted_label, "en")
+        print(f"✅ Финальный результат: {result}")
+        return result
     except Exception as e:
         print(f"⚠️ Ошибка анализа английского текста: {e}")
         return "neutral"

@@ -1,13 +1,13 @@
 
 #!/usr/bin/env python
 """
-Тест исправленного анализа настроения
+Улучшенный тест анализа настроения с отладкой
 """
 
-def test_sentiment_fix():
-    """Тестирует исправленный анализ настроения"""
-    print("🔍 ТЕСТ ИСПРАВЛЕННОГО АНАЛИЗА НАСТРОЕНИЯ")
-    print("=" * 50)
+def test_sentiment_debug():
+    """Тестирует анализ настроения с подробной отладкой"""
+    print("🔍 ОТЛАДОЧНЫЙ ТЕСТ АНАЛИЗА НАСТРОЕНИЯ")
+    print("=" * 60)
     
     # Импортируем функции
     try:
@@ -17,53 +17,71 @@ def test_sentiment_fix():
         print(f"❌ Ошибка импорта: {e}")
         return False
     
-    # Тестовые тексты
-    test_texts = [
-        ("Отличные новости для инвесторов!", "ru"),
-        ("Акции компании упали на 10%", "ru"),
-        ("Great news for NVIDIA stock", "en"),
-        ("Stock market crashed today", "en")
+    # Тестовые тексты с ожидаемыми результатами
+    test_cases = [
+        # Русские тексты
+        ("Сбербанк показал рекордную прибыль", "ru", "positive"),
+        ("Отличные новости для инвесторов!", "ru", "positive"),
+        ("Акции компании упали на 10%", "ru", "negative"),
+        ("Цена осталась на том же уровне", "ru", "neutral"),
+        
+        # Английские тексты
+        ("NVIDIA stock is performing exceptionally well", "en", "positive"),
+        ("Great news for NVIDIA stock", "en", "positive"),
+        ("Stock market crashed today", "en", "negative"),
+        ("The price remained stable", "en", "neutral")
     ]
     
-    print("\n📊 ТЕСТИРУЕМ АНАЛИЗ НАСТРОЕНИЯ:")
-    print("-" * 40)
+    print(f"\n📊 ПОДРОБНЫЙ АНАЛИЗ:")
+    print("-" * 60)
     
-    for text, lang in test_texts:
-        print(f"\n📝 Текст: {text}")
+    correct = 0
+    total = len(test_cases)
+    
+    for i, (text, lang, expected) in enumerate(test_cases, 1):
+        print(f"\n🧪 ТЕСТ {i}/{total}")
+        print(f"📝 Текст: '{text}'")
         print(f"🌍 Язык: {lang}")
+        print(f"🎯 Ожидаемый результат: {expected}")
+        print("-" * 40)
         
         try:
             if lang == "ru":
-                sentiment = classify_ru(text)
+                result = classify_ru(text)
             else:
-                sentiment = classify_en(text)
+                result = classify_en(text)
             
-            emoji = {"positive": "🟢", "negative": "🔴", "neutral": "🟡"}[sentiment]
-            print(f"📈 Настроение: {emoji} {sentiment.upper()}")
+            # Проверяем результат
+            is_correct = result == expected
+            status = "✅ ПРАВИЛЬНО" if is_correct else "❌ НЕПРАВИЛЬНО"
             
+            print(f"🏁 Получен результат: {result}")
+            print(f"📋 Статус: {status}")
+            
+            if is_correct:
+                correct += 1
+                
         except Exception as e:
             print(f"❌ Ошибка анализа: {e}")
             continue
+        
+        print("=" * 60)
     
-    # Тест мультиязычной функции
-    print(f"\n🌍 ТЕСТ МУЛЬТИЯЗЫЧНОЙ ФУНКЦИИ:")
-    print("-" * 40)
+    # Итоговая статистика
+    accuracy = (correct / total) * 100
+    print(f"\n📈 ИТОГОВАЯ СТАТИСТИКА:")
+    print(f"✅ Правильных ответов: {correct}/{total}")
+    print(f"📊 Точность: {accuracy:.1f}%")
     
-    multi_texts = [
-        "Яндекс показал отличные результаты",
-        "NVIDIA stock is performing well"
-    ]
-    
-    for text in multi_texts:
-        try:
-            sentiment = classify_multi(text)
-            emoji = {"positive": "🟢", "negative": "🔴", "neutral": "🟡"}[sentiment]
-            print(f"📝 {text} → {emoji} {sentiment.upper()}")
-        except Exception as e:
-            print(f"❌ Ошибка: {e}")
+    if accuracy < 70:
+        print("⚠️  ВНИМАНИЕ: Низкая точность модели!")
+        print("💡 Рекомендации:")
+        print("   • Рассмотреть использование другой модели")
+        print("   • Добавить дополнительную предобработку текста")
+        print("   • Использовать ансамбль моделей")
     
     print(f"\n✅ Тест завершен!")
-    return True
+    return accuracy >= 70
 
 if __name__ == "__main__":
-    test_sentiment_fix()
+    test_sentiment_debug()
