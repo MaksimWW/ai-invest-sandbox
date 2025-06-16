@@ -115,19 +115,46 @@ def send_telegram_message(message):
 
 def get_sentiment_score(ticker: str) -> int:
     """Анализирует настроение новостей по тикеру (русские + английские)"""
-    # Получаем новости из обоих источников
-    ru_texts = latest_news_ru(ticker, hours=24)
-    en_texts = fetch_news(ticker, hours=24)
+    # Определяем тип тикера
+    russian_tickers = {"YNDX", "FXIT", "GAZP", "LKOH", "SBER", "NVTK"}
+    american_tickers = {"NVDA", "AMD", "AAPL", "TSLA", "GOOGL", "MSFT", "META"}
     
-    all_texts = ru_texts + en_texts
+    all_texts = []
+    
+    if ticker in russian_tickers:
+        # Для русских тикеров используем русские источники
+        print(f"🇷🇺 Ищем русские новости для {ticker}...")
+        ru_texts = latest_news_ru(ticker, hours=24)
+        all_texts.extend(ru_texts)
+        print(f"📰 Русские новости для {ticker}: {len(ru_texts)}")
+        
+    elif ticker in american_tickers:
+        # Для американских тикеров используем английские источники
+        print(f"🇺🇸 Ищем англоязычные новости для {ticker}...")
+        en_texts = fetch_news(ticker, hours=24)
+        all_texts.extend(en_texts)
+        print(f"📰 Англоязычные новости для {ticker}: {len(en_texts)}")
+        
+    else:
+        # Для неизвестных тикеров пробуем оба источника
+        print(f"🌍 Ищем новости для неизвестного тикера {ticker} в обоих источниках...")
+        ru_texts = latest_news_ru(ticker, hours=24)
+        en_texts = fetch_news(ticker, hours=24)
+        all_texts.extend(ru_texts)
+        all_texts.extend(en_texts)
+        print(f"📰 Новости для {ticker}: русских {len(ru_texts)}, английских {len(en_texts)}")
+    
     if not all_texts:
+        print(f"❌ Новости для {ticker} не найдены")
         return 0
     
     votes = sum(1 if classify_multi(t) == "positive"
                 else -1 if classify_multi(t) == "negative"
                 else 0
                 for t in all_texts)
-    return max(-1, min(1, votes))   # нормализуем к −1..+1
+    sentiment_score = max(-1, min(1, votes))
+    print(f"📊 Настроение для {ticker}: {sentiment_score} (из {len(all_texts)} новостей)")
+    return sentiment_score
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
     """Упрощенная функция для логирования сделок по сигналам бота"""
