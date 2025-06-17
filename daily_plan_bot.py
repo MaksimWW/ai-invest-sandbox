@@ -535,4 +535,19 @@ def run_Telegram_bot():
                     log_content = "".join(last_lines)
 
                 if log_content:
-                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n
+                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```")
+
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
+
+        else:
+            bot.reply_to(msg, "Неизвестная команда. Используйте /help")
+
+    bot.infinity_polling()
+
+if __name__ == "__main__":
+    # Запускаем ежедневный анализ (можно закомментировать)
+    # run_daily_analysis()
+
+    # Запускаем Telegram бота
+    run_Telegram_bot()
