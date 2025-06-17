@@ -124,7 +124,7 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
 
     # Если кэш пуст, собираем новые новости и анализируем
     print(f"🔄 Обновляем анализ новостей для {ticker}...")
-    
+
     # Определяем тип тикера
     russian_tickers = {"YNDX", "FXIT", "GAZP", "LKOH", "SBER", "NVTK"}
     american_tickers = {"NVDA", "AMD", "AAPL", "TSLA", "GOOGL", "MSFT", "META"}
@@ -147,10 +147,10 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
 
     # Анализируем каждую новость через LLM с кэшированием
     print(f"🤖 Анализируем {len(all_texts)} новостей через LLM...")
-    
+
     total_score = 0
     processed = 0
-    
+
     for text in all_texts:
         try:
             sentiment = smart_classify(text, ticker)
@@ -230,6 +230,16 @@ def run_Telegram_bot():
         bot = telebot.TeleBot(TELEGRAM_TOKEN)
         bot.get_me()  # Проверяем соединение
         print("✅ Соединение с Telegram API установлено")
+
+        # Проверяем настройку внешних API
+        newsapi_key = os.getenv("NEWSAPI_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+
+        print("🔑 Настройка внешних API:")
+        print(f"   • NewsAPI: {'✅' if newsapi_key else '❌ не настроен'}")
+        print(f"   • OpenAI: {'✅' if openai_key else '❌ не настроен'}")
+
+        print("🤖 Telegram бот запущен...")
     except Exception as e:
         if "409" in str(e):
             print("❌ Ошибка 409: Другой экземпляр бота уже запущен!")
