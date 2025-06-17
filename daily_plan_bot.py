@@ -112,10 +112,19 @@ def send_telegram_message(message):
         return False
 
 def get_sentiment_score(ticker: str, hours: int = 24) -> int:
-    """Анализирует настроение новостей по тикеру (русские + английские)"""
-    from nlp.sentiment import latest_news_ru, classify_multi
+    """Анализирует настроение новостей по тикеру через LLM с кэшированием"""
+    from nlp.sentiment_llm import get_sentiment_score_from_cache, smart_classify
+    from nlp.sentiment import latest_news_ru
     from news_feed import fetch_news
 
+    # Сначала проверяем кэш
+    cached_score = get_sentiment_score_from_cache(ticker, hours)
+    if cached_score != 0:  # Если в кэше есть данные
+        return cached_score
+
+    # Если кэш пуст, собираем новые новости и анализируем
+    print(f"🔄 Обновляем анализ новостей для {ticker}...")
+    
     # Определяем тип тикера
     russian_tickers = {"YNDX", "FXIT", "GAZP", "LKOH", "SBER", "NVTK"}
     american_tickers = {"NVDA", "AMD", "AAPL", "TSLA", "GOOGL", "MSFT", "META"}
@@ -123,12 +132,12 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
     all_texts = []
 
     if ticker in russian_tickers:
-        print(f"🇷🇺 Анализ русских новостей {ticker}...")
+        print(f"🇷🇺 Собираем русские новости {ticker}...")
         ru_texts = latest_news_ru(ticker, hours=hours)
         all_texts.extend(ru_texts)
 
     elif ticker in american_tickers:
-        print(f"🇺🇸 Анализ англоязычных новостей {ticker}...")
+        print(f"🇺🇸 Собираем англоязычные новости {ticker}...")
         en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(en_texts)
 
@@ -136,43 +145,25 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
         print(f"❌ Новости для {ticker} не найдены")
         return 0
 
-    # Анализируем настроение всех найденных новостей
-    sentiments = []
-    failed_count = 0
+    # Анализируем каждую новость через LLM с кэшированием
+    print(f"🤖 Анализируем {len(all_texts)} новостей через LLM...")
+    
+    total_score = 0
+    processed = 0
     
     for text in all_texts:
         try:
-            sentiment = classify_multi(text)
+            sentiment = smart_classify(text, ticker)
             if sentiment == "positive":
-                sentiments.append(1)
+                total_score += 1
             elif sentiment == "negative":
-                sentiments.append(-1)
-            else:
-                sentiments.append(0)
+                total_score -= 1
+            processed += 1
         except Exception as e:
-            failed_count += 1
-            # Простой fallback анализ по ключевым словам
-            positive_words = ['рост', 'прибыль', 'доход', 'выросли', 'увелич', 'rise', 'gain', 'profit', 'increase']
-            negative_words = ['падение', 'убыток', 'снизил', 'упали', 'кризис', 'decline', 'loss', 'drop', 'fall']
-            
-            text_lower = text.lower()
-            pos_count = sum(1 for word in positive_words if word in text_lower)
-            neg_count = sum(1 for word in negative_words if word in text_lower)
-            
-            if pos_count > neg_count:
-                sentiments.append(1)
-            elif neg_count > pos_count:
-                sentiments.append(-1)
-            else:
-                sentiments.append(0)
+            print(f"⚠️ Ошибка анализа: {e}")
+            continue
 
-    total_score = sum(sentiments)
-    success_rate = (len(all_texts) - failed_count) / len(all_texts) * 100 if all_texts else 0
-    
-    print(f"📊 Настроение {ticker}: {total_score} (из {len(all_texts)} новостей, анализ: {success_rate:.1f}%)")
-    if failed_count > 0:
-        print(f"⚠️ Fallback анализ для {failed_count} новостей")
-    
+    print(f"📊 Настроение {ticker}: {total_score} (из {processed} обработанных новостей)")
     return total_score
 
 def log_signal_trade(ticker: str, figi: str, signal: str, price: float, qty: int = 1):
