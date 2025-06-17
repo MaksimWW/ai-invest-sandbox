@@ -5,6 +5,7 @@ import asyncio
 import gzip
 import os
 import time
+import cachetools
 import datetime as dt
 import functools
 
@@ -20,6 +21,8 @@ RSS_FEEDS = {
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/125.0 Safari/537.36")
+
+_CACHE = cachetools.TTLCache(maxsize=128, ttl=900)   # 15 мин
 
 def _timeout_for(url: str) -> int:
     if "moex.com/export/news" in url:
@@ -39,11 +42,18 @@ async def _single_try(url: str, timeout: int):
                 return raw.decode(r.charset or "utf-8", "ignore")
 
 async def _fetch(url: str):
+    # 0) cache hit
+    if url in _CACHE:
+        return _CACHE[url]
+
     timeout = _timeout_for(url)
     url_variant = url
     for attempt in (1, 2, 3):
         try:
-            return await _single_try(url_variant, timeout)
+            data = await _single_try(url_variant, timeout)
+            if data:           # сохраняем только не-пустой результат
+                _CACHE[url] = data
+            return data
         except Exception:
             # first fail on Interfax https → retry http
             if attempt == 1 and "finmarket.ru" in url_variant and url_variant.startswith("https"):
