@@ -268,7 +268,7 @@ def _extract_financial_signals(text: str) -> Dict[str, float]:
 
     text_lower = text.lower()
     signals = {'positive': 0, 'negative': 0, 'neutral': 0}
-    
+
     # Определяем язык (простая эвристика)
     lang = 'ru' if any(char in 'абвгдежзийклмнопрстуфхцчшщъыьэюя' for char in text_lower[:50]) else 'en'
 

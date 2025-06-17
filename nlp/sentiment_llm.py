@@ -1,4 +1,3 @@
-
 import os
 import json
 import sqlite3
@@ -31,7 +30,7 @@ def init_database():
     """Инициализирует SQLite базу для кэширования"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sentiment_cache (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,23 +43,23 @@ def init_database():
             source TEXT DEFAULT 'llm'
         )
     ''')
-    
+
     # Индекс для быстрого поиска по времени и тикеру
     cursor.execute('''
         CREATE INDEX IF NOT EXISTS idx_timestamp_ticker 
         ON sentiment_cache(timestamp, ticker)
     ''')
-    
+
     conn.commit()
     conn.close()
 
 def build_prompt(text: str) -> Dict[str, str]:
     """Строит оптимизированный промпт для LLM"""
     system_prompt = "Classify financial news sentiment: positive/negative/neutral. Reply with one word only."
-    
+
     # Обрезаем текст до 100 символов для экономии токенов
     user_text = text[:100] + "..." if len(text) > 100 else text
-    
+
     return {
         "system": system_prompt,
         "user": f"Text: {user_text}"
@@ -70,12 +69,12 @@ def call_openai_sync(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, tempe
     """Синхронный вызов OpenAI API"""
     if not OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY не настроен")
-    
+
     if LLM_OFF:
         raise ValueError("LLM анализ отключен (LLM_OFF=1)")
-    
+
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",  # Более экономная модель
@@ -87,9 +86,9 @@ def call_openai_sync(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, tempe
             temperature=temperature,
             timeout=10
         )
-        
+
         result = response.choices[0].message.content.strip().lower()
-        
+
         # Нормализуем ответ
         if "positive" in result:
             return "positive"
@@ -97,7 +96,7 @@ def call_openai_sync(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, tempe
             return "negative"
         else:
             return "neutral"
-            
+
     except Exception as e:
         print(f"❌ Ошибка OpenAI API: {e}")
         return "neutral"  # Fallback
@@ -118,37 +117,37 @@ def cache_get(text_hash: str) -> Optional[Dict]:
             cached = redis_client.get(f"sentiment:{text_hash}")
         except:
             cached = None
-    
+
     if cached:
         try:
             return json.loads(cached)
         except:
             pass
-    
+
     # Если Redis не сработал, проверяем SQLite
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     # Ищем свежие записи (не старше CACHE_HOURS)
     cutoff = datetime.now() - timedelta(hours=CACHE_HOURS)
-    
+
     cursor.execute('''
         SELECT sentiment, confidence, timestamp 
         FROM sentiment_cache 
         WHERE text_hash = ? AND timestamp > ?
         ORDER BY timestamp DESC LIMIT 1
     ''', (text_hash, cutoff.isoformat()))
-    
+
     result = cursor.fetchone()
     conn.close()
-    
+
     if result:
         return {
             "sentiment": result[0],
             "confidence": result[1],
             "timestamp": result[2]
         }
-    
+
     return None
 
 def cache_set(text_hash: str, text: str, sentiment: str, confidence: float = 0.5, ticker: str = None):
@@ -158,7 +157,7 @@ def cache_set(text_hash: str, text: str, sentiment: str, confidence: float = 0.5
         "confidence": confidence,
         "timestamp": datetime.now().isoformat()
     }
-    
+
     # Сохраняем в Redis
     if isinstance(redis_client, dict):
         # In-memory fallback
@@ -172,18 +171,18 @@ def cache_set(text_hash: str, text: str, sentiment: str, confidence: float = 0.5
             )
         except:
             pass
-    
+
     # Сохраняем в SQLite
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     try:
         cursor.execute('''
             INSERT OR REPLACE INTO sentiment_cache 
             (text_hash, text, sentiment, confidence, ticker, source)
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (text_hash, text, sentiment, confidence, ticker, 'llm'))
-        
+
         conn.commit()
     except Exception as e:
         print(f"⚠️ Ошибка записи в SQLite: {e}")
@@ -194,30 +193,30 @@ def smart_classify(text: str, ticker: str = None) -> str:
     """Умная классификация с кэшированием"""
     if not text or not text.strip():
         return "neutral"
-    
+
     text_hash = get_text_hash(text.strip())
-    
+
     # Проверяем кэш
     cached = cache_get(text_hash)
     if cached:
         print(f"🔄 Кэш: {cached['sentiment']}")
         return cached["sentiment"]
-    
+
     # Fallback на ключевые слова если LLM недоступен
     if LLM_OFF or not OPENAI_API_KEY:
         sentiment = fallback_classify(text)
         cache_set(text_hash, text, sentiment, 0.3, ticker)
         return sentiment
-    
+
     # Вызываем LLM
     try:
         prompt = build_prompt(text)
         sentiment = call_openai_sync(prompt)
-        
+
         print(f"🤖 LLM: {sentiment}")
         cache_set(text_hash, text, sentiment, 0.8, ticker)
         return sentiment
-        
+
     except Exception as e:
         print(f"❌ LLM недоступен: {e}")
         sentiment = fallback_classify(text)
@@ -227,20 +226,20 @@ def smart_classify(text: str, ticker: str = None) -> str:
 def fallback_classify(text: str) -> str:
     """Fallback классификация по ключевым словам"""
     text_lower = text.lower()
-    
+
     positive_words = [
         'рост', 'прибыль', 'доход', 'выросли', 'увелич', 'повыш', 'улучш',
         'rise', 'gain', 'profit', 'increase', 'growth', 'up', 'strong', 'beat'
     ]
-    
+
     negative_words = [
         'падение', 'убыток', 'снизил', 'упали', 'кризис', 'уменьш', 'потер',
         'decline', 'loss', 'drop', 'fall', 'down', 'weak', 'miss', 'disappoint'
     ]
-    
+
     pos_count = sum(1 for word in positive_words if word in text_lower)
     neg_count = sum(1 for word in negative_words if word in text_lower)
-    
+
     if pos_count > neg_count:
         return "positive"
     elif neg_count > pos_count:
@@ -248,58 +247,69 @@ def fallback_classify(text: str) -> str:
     else:
         return "neutral"
 
-def get_sentiment_score_from_cache(ticker: str, hours: int = 24) -> int:
-    """Получает sentiment score из кэша SQLite"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Ищем записи за указанный период
-    cutoff = datetime.now() - timedelta(hours=hours)
-    
-    cursor.execute('''
-        SELECT sentiment FROM sentiment_cache 
-        WHERE timestamp > ? AND (ticker = ? OR text LIKE ?)
-        ORDER BY timestamp DESC
-    ''', (cutoff.isoformat(), ticker, f'%{ticker}%'))
-    
-    results = cursor.fetchall()
-    conn.close()
-    
-    if not results:
-        print(f"📊 Кэш пуст для {ticker}")
+def get_sentiment_score_from_cache(ticker: str, hours: int = 24, force_refresh: bool = False) -> int:
+    """Получить оценку настроения из кэша SQLite, если данные свежие"""
+
+    # Если принудительное обновление - пропускаем кэш
+    if force_refresh:
+        print(f"🔄 Принудительное обновление для {ticker}")
         return 0
-    
-    # Подсчитываем score
-    score = 0
-    for (sentiment,) in results:
-        if sentiment == "positive":
-            score += 1
-        elif sentiment == "negative":
-            score -= 1
-    
-    print(f"📊 Настроение {ticker}: {score} (из {len(results)} новостей в кэше)")
-    return score
+
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        # Ищем записи за указанный период
+        cutoff = datetime.now() - timedelta(hours=hours)
+
+        cursor.execute('''
+            SELECT sentiment FROM sentiment_cache 
+            WHERE timestamp > ? AND (ticker = ? OR text LIKE ?)
+            ORDER BY timestamp DESC
+        ''', (cutoff.isoformat(), ticker, f'%{ticker}%'))
+
+        results = cursor.fetchall()
+        conn.close()
+
+        if not results:
+            print(f"📊 Кэш пуст для {ticker}")
+            return 0
+
+        # Подсчитываем score
+        score = 0
+        for (sentiment,) in results:
+            if sentiment == "positive":
+                score += 1
+            elif sentiment == "negative":
+                score -= 1
+
+        print(f"📊 Настроение {ticker}: {score} (из {len(results)} новостей в кэше)")
+        return score
+
+    except Exception as e:
+        print(f"Ошибка при получении score из кэша: {e}")
+        return 0
 
 def get_cache_stats() -> Dict:
     """Статистика кэша"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     # Общее количество записей
     cursor.execute("SELECT COUNT(*) FROM sentiment_cache")
     total = cursor.fetchone()[0]
-    
+
     # Записи за последние 24 часа
     cutoff = datetime.now() - timedelta(hours=24)
     cursor.execute("SELECT COUNT(*) FROM sentiment_cache WHERE timestamp > ?", (cutoff.isoformat(),))
     recent = cursor.fetchone()[0]
-    
+
     # Записи по источникам
     cursor.execute("SELECT source, COUNT(*) FROM sentiment_cache GROUP BY source")
     by_source = dict(cursor.fetchall())
-    
+
     conn.close()
-    
+
     return {
         "total_entries": total,
         "recent_24h": recent,

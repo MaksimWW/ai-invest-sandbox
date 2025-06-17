@@ -111,15 +111,16 @@ def send_telegram_message(message):
         print(f"❌ Ошибка отправки в Telegram: {e}")
         return False
 
-def get_sentiment_score(ticker: str, hours: int = 24) -> int:
+def get_sentiment_score(ticker: str, hours: int = 24, force_refresh: bool = False) -> int:
     """Анализирует настроение новостей по тикеру через LLM с кэшированием"""
     from nlp.sentiment_llm import get_sentiment_score_from_cache, smart_classify
     from nlp.sentiment import latest_news_ru
     from news_feed import fetch_news
 
-    # Сначала проверяем кэш
-    cached_score = get_sentiment_score_from_cache(ticker, hours)
-    if cached_score != 0:  # Если в кэше есть данные
+    # Сначала проверяем кэш (если не принудительное обновление)
+    cached_score = get_sentiment_score_from_cache(ticker, hours, force_refresh)
+    if cached_score != 0 and not force_refresh:  # Если в кэше есть данные
+        print(f"📊 Используем кэшированные данные для {ticker}: {cached_score}")
         return cached_score
 
     # Если кэш пуст, собираем новые новости и анализируем
@@ -131,10 +132,16 @@ def get_sentiment_score(ticker: str, hours: int = 24) -> int:
 
     all_texts = []
 
+    # Мультиязычная агрегация: для всех тикеров пробуем все источники
     if ticker in russian_tickers:
         print(f"🇷🇺 Собираем русские новости {ticker}...")
         ru_texts = latest_news_ru(ticker, hours=hours)
         all_texts.extend(ru_texts)
+        
+        # Для русских тикеров также пробуем англоязычные источники (международные новости)
+        print(f"🌍 Дополнительно ищем международные новости {ticker}...")
+        en_texts = fetch_news(ticker, hours=hours)
+        all_texts.extend(en_texts)
 
     elif ticker in american_tickers:
         print(f"🇺🇸 Собираем англоязычные новости {ticker}...")
@@ -402,6 +409,9 @@ def run_Telegram_bot():
 Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
+/fresh_news [TICKER] [HOURS] - принудительно обновить новости
+Пример: /fresh_news NVDA 12 (обновить новости NVDA за 12 часов)
+
 /ideas [fast] [slow] [ATR] [hours] [ticker...] - композитные идеи (теханализ + новости)
 Пример: /ideas 5 15 0.5 6 NVDA AMD  (новости за 6 часов)
 По умолчанию: /ideas 5 15 0 24 (все тикеры, новости за 24ч)
@@ -444,6 +454,24 @@ def run_Telegram_bot():
              except Exception as e:
                 error_message = f"❌ Ошибка получения P/L: {e}"
                 bot.reply_to(msg, error_message)
+
+        elif text.startswith("/fresh_news"):
+            parts = text.split()
+            try:
+                ticker = parts[1].upper() if len(parts) > 1 else "YNDX"
+                hours = int(parts[2]) if len(parts) > 2 else 6
+            except (ValueError, IndexError):
+                bot.reply_to(msg, "Формат: /fresh_news [TICKER] [HOURS]\nПример: /fresh_news NVDA 12")
+                return
+                
+            bot.reply_to(msg, f"🔄 Принудительно обновляю новости {ticker} за {hours}ч...")
+            
+            try:
+                sentiment = get_sentiment_score(ticker, hours=hours, force_refresh=True)
+                emoji = "🟢" if sentiment > 0 else "🔴" if sentiment < 0 else "🟡"
+                bot.reply_to(msg, f"{emoji} Свежий анализ {ticker}: {sentiment}")
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка обновления: {e}")
 
         elif text.lower().startswith("/ideas"):
             parts = text.split()
