@@ -114,8 +114,10 @@ def send_telegram_message(message):
 def get_sentiment_score(ticker: str, hours: int = 24, force_refresh: bool = False) -> int:
     """Анализирует настроение новостей по тикеру через LLM с кэшированием"""
     from nlp.sentiment_llm import get_sentiment_score_from_cache, smart_classify
-    from nlp.sentiment import latest_news_ru
+    # from nlp.sentiment import latest_news_ru # remove
     from news_feed import fetch_news
+    from nlp.news_rss_async import async_fetch_all
+    import asyncio
 
     # Сначала проверяем кэш (если не принудительное обновление)
     cached_score = get_sentiment_score_from_cache(ticker, hours, force_refresh)
@@ -135,9 +137,10 @@ def get_sentiment_score(ticker: str, hours: int = 24, force_refresh: bool = Fals
     # Мультиязычная агрегация: для всех тикеров пробуем все источники
     if ticker in russian_tickers:
         print(f"🇷🇺 Собираем русские новости {ticker}...")
-        ru_texts = latest_news_ru(ticker, hours=hours)
+        from nlp.sentiment import fetch_ru_news
+        ru_texts = fetch_ru_news(hours=hours)
         all_texts.extend(ru_texts)
-        
+
         # Для русских тикеров также пробуем англоязычные источники (международные новости)
         print(f"🌍 Дополнительно ищем международные новости {ticker}...")
         en_texts = fetch_news(ticker, hours=hours)
@@ -147,6 +150,12 @@ def get_sentiment_score(ticker: str, hours: int = 24, force_refresh: bool = Fals
         print(f"🇺🇸 Собираем англоязычные новости {ticker}...")
         en_texts = fetch_news(ticker, hours=hours)
         all_texts.extend(en_texts)
+
+        # Для американских тикеров также пробуем русские источники (возможны международные упоминания)
+        print(f"🌍 Дополнительно ищем русские новости {ticker}...")
+        from nlp.sentiment import fetch_ru_news
+        ru_texts = fetch_ru_news(hours=hours)
+        all_texts.extend(ru_texts)
 
     if not all_texts:
         print(f"❌ Новости для {ticker} не найдены")
@@ -405,7 +414,7 @@ def run_Telegram_bot():
 
 /prices - показать актуальные цены
 /signals [fast] [slow] [ATR] [interval] [ticker...] - торговые сигналы
-Пример: /signals 10 40 1.2 15min YNDX FXIT
+Пример: /signals 5 15 0.5 15min GAZP LKOH
 Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
@@ -463,9 +472,9 @@ def run_Telegram_bot():
             except (ValueError, IndexError):
                 bot.reply_to(msg, "Формат: /fresh_news [TICKER] [HOURS]\nПример: /fresh_news NVDA 12")
                 return
-                
+
             bot.reply_to(msg, f"🔄 Принудительно обновляю новости {ticker} за {hours}ч...")
-            
+
             try:
                 sentiment = get_sentiment_score(ticker, hours=hours, force_refresh=True)
                 emoji = "🟢" if sentiment > 0 else "🔴" if sentiment < 0 else "🟡"
@@ -526,43 +535,4 @@ def run_Telegram_bot():
                     log_content = "".join(last_lines)
 
                 if log_content:
-                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n```", parse_mode="Markdown")
-                else:
-                    bot.reply_to(msg, "📋 Лог-файл пуст")
-            except FileNotFoundError:
-                bot.reply_to(msg, "📋 Лог-файл не найден")
-            except Exception as e:
-                bot.reply_to(msg, f"❌ Ошибка чтения лога: {e}")
-
-        else:
-            bot.reply_to(msg, "❓ Неизвестная команда. Используйте /help для справки")
-
-    print("🤖 Telegram бот запущен...")
-
-    # Добавляем обработку ошибок при запуске
-    try:
-        bot.polling(none_stop=True, interval=1, timeout=20)
-    except Exception as e:
-        if "409" in str(e) and "Conflict" in str(e):
-            print("❌ Ошибка 409: Другой экземпляр бота уже запущен!")
-            print("💡 Решение:")
-            print("   1. Остановите все запущенные боты")
-            print("   2. Подождите 10-15 секунд")
-            print("   3. Запустите бота заново")
-        else:
-            print(f"❌ Ошибка бота: {e}")
-        raise
-
-def main():
-    """Основная функция - выбор режима работы"""
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "bot":
-        # Режим Telegram бота
-        run_Telegram_bot()
-    else:
-        # Режим разового анализа
-        run_daily_analysis()
-
-if __name__ == "__main__":
-    main()
+                    bot.reply_to(msg, f"📋 Последние записи лога:\n```\n{log_content}\n

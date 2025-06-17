@@ -2,6 +2,8 @@ from functools import lru_cache
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 import torch, requests, datetime as dt, re
 from news_feed import fetch_news
+from nlp.news_rss_async import async_fetch_all
+import asyncio
 from langdetect import detect
 import warnings
 from typing import Dict, List, Tuple, Optional
@@ -409,84 +411,11 @@ def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
 def classify(text: str) -> str:
     return classify_ru(text)
 
-# RSS-граббер (без изменений)
-RSS_FEEDS = [
-    "https://www.rbc.ru/rss/finances.rss",
-    "https://www.vedomosti.ru/rss/news",
-    "https://lenta.ru/rss/finances", 
-    "https://ria.ru/export/rss2/economy/index.xml",
-    "https://www.interfax.ru/rss.asp?sec=business",
-    "https://www.kommersant.ru/RSS/main.xml",
-    "https://quote.rbc.ru/news/rss/",
-    # Дополнительные источники
-    "https://tass.ru/rss/v2.xml",
-    "https://www.finam.ru/international/advanced/rsspoint/",
-    "https://1prime.ru/export/rss2/index.xml"
-]
-
-def latest_news_ru(ticker: str, hours: int = 24) -> list[str]:
-    """Получить последние русские новости по тикеру"""
-    cutoff = dt.datetime.now() - dt.timedelta(hours=hours)
-    all_news = []
-
-    # Добавляем альтернативные названия для поиска
-    search_terms = [ticker.upper()]
-
-    # Маппинг тикеров на русские названия
-    ticker_names = {
-        "YNDX": ["Яндекс", "Yandex"],
-        "SBER": ["Сбербанк", "Сбер"],
-        "GAZP": ["Газпром"],
-        "LKOH": ["Лукойл", "ЛУКОЙЛ"],
-        "NVTK": ["Новатэк", "НОВАТЭК"],
-        "FXIT": ["Fix Price", "Фикс Прайс"]
-    }
-
-    if ticker in ticker_names:
-        search_terms.extend(ticker_names[ticker])
-
-    print(f"🔍 Ищем новости по терминам: {search_terms}")
-
-    for rss_url in RSS_FEEDS:
-        try:
-            response = requests.get(rss_url, timeout=15, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            })
-            response.raise_for_status()
-
-            # Парсим XML
-            import xml.etree.ElementTree as ET
-            root = ET.fromstring(response.content)
-
-            # Находим все элементы item
-            items = root.findall('.//item')
-
-            source_count = 0
-            for item in items:
-                title_elem = item.find('title')
-                if title_elem is not None and title_elem.text:
-                    title = title_elem.text.strip()
-
-                    # Проверяем, содержит ли заголовок любой из поисковых терминов
-                    title_upper = title.upper()
-                    if any(term.upper() in title_upper for term in search_terms):
-                        all_news.append(title)
-                        source_count += 1
-                        print(f"✅ Найдена новость: {title[:80]}...")
-
-            if source_count > 0:
-                print(f"📰 Источник {rss_url.split('/')[2]}: {source_count} новостей")
-
-        except requests.exceptions.Timeout:
-            print(f"⏰ Таймаут: {rss_url.split('/')[2]}")
-        except requests.exceptions.ConnectionError:
-            print(f"🌐 Недоступен: {rss_url.split('/')[2]}")
-        except Exception as e:
-            print(f"⚠️ Ошибка {rss_url.split('/')[2]}: {type(e).__name__}")
-            continue
-
-    print(f"📊 Итого найдено новостей для {ticker}: {len(all_news)}")
-    return all_news
-
-def latest_news(ticker: str, hours: int = 24) -> list[str]:
-    return latest_news_ru(ticker, hours)
+def fetch_ru_news(hours: int = 24) -> list[str]:
+    """Возвращает заголовки всех русских RSS за N часов."""
+    try:
+        return asyncio.run(async_fetch_all(hours))
+    except RuntimeError:
+        # если уже в running loop (pytest etc.)
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(async_fetch_all(hours))
