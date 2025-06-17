@@ -20,7 +20,7 @@ try:
     redis_client.ping()
     print("✅ Redis подключен")
 except:
-    print("⚠️ Redis недоступен, используем in-memory кэш")
+    pass  # Тихо переключаемся на in-memory кэш
     redis_client = {}
 
 # SQLite база для постоянного хранения
