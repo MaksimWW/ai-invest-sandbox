@@ -14,7 +14,7 @@ RSS_FEEDS = {
     "tass"       : "https://tass.ru/rss/v2.xml",
     "rbc"        : "https://rssexport.rbc.ru/rbcnews/news/finance.rss",
     "kommersant" : "https://www.kommersant.ru/RSS/main.xml",
-    "lenta"      : "https://lenta.ru/rss/finances",
+    "lenta"      : "https://lenta.ru/rss/news",
 }
 
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
