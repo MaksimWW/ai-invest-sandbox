@@ -1,0 +1,54 @@
+# TASK: patch nlp/news_rss_async.py so that MOEX and Interfax RSS are fetched
+#       надёжнее: ↑timeout, браузерный UA, gzip-распаковка, retry-backoff,
+#       fallback с https→http для Interfax. Остальной код не трогать.
+
+────────────────────────────────────────────────────────────────────────────
+1. ОТКРОЙ / СОЗДАЙ файл  nlp/news_rss_async.py
+   Найди функцию  _fetch(url)   и полностью замени её содержимое такой
+   реализацией:
+
+   -----------------------------------------------------------------------
+   import aiohttp, async_timeout, asyncio, gzip, os, time
+   BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                 "AppleWebKit/537.36 (KHTML, like Gecko) "
+                 "Chrome/125.0 Safari/537.36")
+
+   def _timeout_for(url: str) -> int:
+       if "moex.com/export/news" in url:
+           return 15          # тяжёлый XML
+       return int(os.getenv("RSS_TIMEOUT", "6"))
+
+   async def _single_try(url: str, timeout: int):
+       hdrs = {"User-Agent": BROWSER_UA,
+               "Accept-Encoding": "gzip, deflate"}
+       async with aiohttp.ClientSession(
+               timeout=aiohttp.ClientTimeout(total=timeout)) as sess:
+           async with async_timeout.timeout(timeout + 2):
+               async with sess.get(url, headers=hdrs, ssl=False) as r:
+                   raw = await r.read()
+                   if r.headers.get("Content-Encoding") == "gzip":
+                       raw = gzip.decompress(raw)
+                   return raw.decode(r.charset or "utf-8", "ignore")
+
+   async def _fetch(url: str):
+       timeout = _timeout_for(url)
+       url_variant = url
+       for attempt in (1, 2, 3):
+           try:
+               return await _single_try(url_variant, timeout)
+           except Exception:
+               # first fail on Interfax https → retry http
+               if attempt == 1 and "finmarket.ru" in url_variant and url_variant.startswith("https"):
+                   url_variant = url_variant.replace("https://", "http://")
+               else:
+                   await asyncio.sleep(2 ** attempt)   # 2s, 4s
+       return None
+   -----------------------------------------------------------------------
+
+2. НЕ меняй остальные функции файла.
+
+3. requirements.txt уже содержит aiohttp / async_timeout – ничего добавлять не нужно.
+
+4. НЕ трогай другие модули.
+
+# DONE
