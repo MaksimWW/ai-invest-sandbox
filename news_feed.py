@@ -1,9 +1,10 @@
-"""
-news_feed.py  –   агрегатор англоязычных новостей
--------------------------------------------------
-fetch_news(ticker: str, hours: int = 24) -> list[str]
-"""
-import os, datetime as dt, requests
+"""Modified news_feed.py to disable GDELT functionality based on user request."""
+import requests
+import datetime as dt
+import os
+
+# Переменная для отключения GDELT (по умолчанию отключен)
+GDELT_ENABLED = os.getenv("GDELT_ENABLED", "0") == "1"
 
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
 
@@ -72,9 +73,16 @@ def fetch_news(ticker: str, hours: int = 24) -> list[str]:
     else:
         print("⚠️ NewsAPI не настроен (нет NEWSAPI_KEY)")
 
-    # GDELT
-    gdelt_results = _gdelt_query(ticker, cutoff)
-    news += gdelt_results
+    # GDELT - условно отключен
+    if GDELT_ENABLED:
+        print(f"🌐 Запрашиваем GDELT для {ticker}...")
+        gdelt_results = _gdelt_query(ticker, cutoff)
+        news += gdelt_results
+        print(f"✅ GDELT: найдено {len(gdelt_results)} новостей")
+    else:
+        gdelt_results = []
+        print("⚠️ GDELT отключен (используйте GDELT_ENABLED=1 для включения)")
 
     print(f"📊 Итого для {ticker}: {len(news)} новостей (NewsAPI: {len(news) - len(gdelt_results)}, GDELT: {len(gdelt_results)})")
     return news
+`
