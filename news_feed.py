@@ -1,7 +1,4 @@
-` tags. The edited code provides a corrected version of the original code.
 
-```python
-<replit_final_file>
 """Modified news_feed.py to disable GDELT functionality based on user request."""
 import requests
 import datetime as dt
