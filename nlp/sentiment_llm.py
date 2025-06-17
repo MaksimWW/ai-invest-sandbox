@@ -2,7 +2,6 @@
 import os
 import json
 import sqlite3
-import asyncio
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 import openai
@@ -67,18 +66,18 @@ def build_prompt(text: str) -> Dict[str, str]:
         "user": f"Text: {user_text}"
     }
 
-async def call_openai(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, temperature: float = LLM_TEMP) -> str:
-    """Асинхронный вызов OpenAI API"""
+def call_openai_sync(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, temperature: float = LLM_TEMP) -> str:
+    """Синхронный вызов OpenAI API"""
     if not OPENAI_API_KEY:
         raise ValueError("OPENAI_API_KEY не настроен")
     
     if LLM_OFF:
         raise ValueError("LLM анализ отключен (LLM_OFF=1)")
     
-    client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
     
     try:
-        response = await client.chat.completions.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",  # Более экономная модель
             messages=[
                 {"role": "system", "content": prompt["system"]},
@@ -213,11 +212,7 @@ def smart_classify(text: str, ticker: str = None) -> str:
     # Вызываем LLM
     try:
         prompt = build_prompt(text)
-        # Синхронная обертка для async функции
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        sentiment = loop.run_until_complete(call_openai(prompt))
-        loop.close()
+        sentiment = call_openai_sync(prompt)
         
         print(f"🤖 LLM: {sentiment}")
         cache_set(text_hash, text, sentiment, 0.8, ticker)
