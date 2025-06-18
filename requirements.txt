@@ -21,3 +21,4 @@ cachetools>=5.3
 tailer
 psutil
 psutil
+python-telegram-bot
