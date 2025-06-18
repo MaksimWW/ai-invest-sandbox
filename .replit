@@ -93,4 +93,4 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash launch_simple.sh"
+args = "bash launch_with_keydb.sh"
