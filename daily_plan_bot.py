@@ -430,6 +430,10 @@ def run_Telegram_bot():
 Интервалы: 1min, 5min, 15min, 30min, hour, day
 По умолчанию: /signals = /signals 20 50 1.0 hour (все тикеры)
 
+/sentiment TICKER [hours] - показать последние новости с тональностью
+Пример: /sentiment NVDA 24 (новости NVDA за 24 часа)
+По умолчанию: /sentiment TICKER = /sentiment TICKER 48 (за 48 часов)
+
 /fresh_news [TICKER] [HOURS] - принудительно обновить новости
 Пример: /fresh_news NVDA 12 (обновить новости NVDA за 12 часов)
 
@@ -537,6 +541,46 @@ def run_Telegram_bot():
                 reply += "Нет сильных идей сейчас."
             bot.reply_to(msg, reply)
             return
+
+        elif text.startswith("/sentiment"):
+            parts = text.split()
+            if len(parts) < 2:
+                bot.reply_to(msg, "Использование: /sentiment TICKER [часов]")
+                return
+            
+            ticker = parts[1].upper()
+            hours = int(parts[2]) if len(parts) > 2 else 48
+            
+            try:
+                import sqlite3
+                import os
+                
+                db = sqlite3.connect(os.getenv("NEWS_DB", "db/news_cache.db"))
+                query = """
+                  SELECT dt, headline, label
+                  FROM   news
+                  WHERE  ticker = ? AND dt >= datetime('now', ? || ' hours')
+                  ORDER  BY dt DESC
+                  LIMIT  5
+                """
+                rows = db.execute(query, (ticker, -hours)).fetchall()
+                db.close()
+                
+                if not rows:
+                    bot.reply_to(msg, f"Новостей по {ticker} за {hours} ч нет.")
+                    return
+                
+                def emoji(lbl):
+                    return {1:"👍", -1:"👎", 0:"⚪"}.get(lbl, "❓")
+                
+                lines = [f"📰 *{ticker}* · {hours}ч\n"]
+                for dt_str, hline, lbl in rows:
+                    lines.append(f"{emoji(lbl)} {hline[:120]}")   # обрезаем длинные
+                
+                bot.reply_to(msg, "\n".join(lines), parse_mode="Markdown")
+                
+            except Exception as e:
+                bot.reply_to(msg, f"❌ Ошибка получения новостей: {e}")
 
         elif text.startswith("/debug"):
             try:
