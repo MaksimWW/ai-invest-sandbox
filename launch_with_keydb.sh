@@ -24,7 +24,7 @@ if ! pgrep -f "keydb-server" > /dev/null; then
     echo "🚀 Starting KeyDB daemon..."
     tools/keydb/bin/keydb-server --daemonize yes \
       --save "" --appendonly no \
-      --bind 0.0.0.0 --port 6379 --protected-mode no &
+      --bind 127.0.0.1 --port 6379
     echo "✅ KeyDB daemon started."
 else
     echo "✅ KeyDB already running."
