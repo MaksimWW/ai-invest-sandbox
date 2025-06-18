@@ -25,7 +25,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python daily_plan_bot.py bot"
+args = ""
 
 [[workflows.workflow]]
 name = "Telegram Bot with KeyDB"
@@ -34,7 +34,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "bash launch_with_keydb.sh"
+args = ""
 
 [[workflows.workflow]]
 name = "KeyDB Bot (Clean)"
@@ -43,15 +43,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pkill -f \"daily_plan_bot.py\" || true"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "sleep 2"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash launch_with_keydb.sh"
+args = ""
 
 [[workflows.workflow]]
 name = "Safe Bot Start"
