@@ -16,7 +16,7 @@ run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
 
 [workflows]
-runButton = "Telegram Bot with KeyDB"
+runButton = "KeyDB Bot (Clean)"
 
 [[workflows.workflow]]
 name = "Telegram Bot"
@@ -31,6 +31,23 @@ args = "python daily_plan_bot.py bot"
 name = "Telegram Bot with KeyDB"
 author = 42562777
 mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash launch_with_keydb.sh"
+
+[[workflows.workflow]]
+name = "KeyDB Bot (Clean)"
+author = 42562777
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pkill -f \"daily_plan_bot.py\" || true"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "sleep 2"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
