@@ -2,10 +2,19 @@
 #!/usr/bin/env bash
 set -e
 if [[ ! -d tools/keydb/bin ]]; then
-    echo "🔄  Downloading KeyDB binary..."
-    curl -L -o keydb.tar.gz \
-      "https://github.com/Snapchat/KeyDB/releases/download/v6.3.4/keydb-6.3.4-x86_64.tar.gz"
-    mkdir -p tools/keydb && tar -xzf keydb.tar.gz -C tools/keydb --strip-components=1
-    rm keydb.tar.gz
-    echo "✅  KeyDB installed."
+    echo "🔄  Installing Redis server as KeyDB alternative..."
+    # Используем стандартный Redis вместо KeyDB
+    mkdir -p tools/keydb/bin
+    
+    # Проверяем наличие redis-server в системе
+    if command -v redis-server >/dev/null 2>&1; then
+        ln -sf $(which redis-server) tools/keydb/bin/keydb-server
+        echo "✅  Redis server linked as keydb-server"
+    else
+        echo "❌  Redis not found in system. Installing via package manager..."
+        # Для Nix окружения Replit
+        nix-env -iA nixpkgs.redis
+        ln -sf $(which redis-server) tools/keydb/bin/keydb-server
+        echo "✅  Redis installed and linked as keydb-server"
+    fi
 fi
