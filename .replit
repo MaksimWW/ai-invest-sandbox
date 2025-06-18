@@ -93,4 +93,4 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python daily_plan_bot.py"
+args = "bash launch_simple.sh"
