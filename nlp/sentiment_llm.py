@@ -161,6 +161,8 @@ def cache_get(text_hash: str) -> Optional[Dict]:
 
 def cache_set(text_hash: str, text: str, sentiment: str, confidence: float = 0.5, ticker: str = None):
     """Сохраняет результат в кэш (Redis + SQLite)"""
+    from db.storage import insert as log_news
+    
     data = {
         "sentiment": sentiment,
         "confidence": confidence,
@@ -197,6 +199,21 @@ def cache_set(text_hash: str, text: str, sentiment: str, confidence: float = 0.5
         print(f"⚠️ Ошибка записи в SQLite: {e}")
     finally:
         conn.close()
+    
+    # Логируем в news cache для бэктестов
+    if ticker:
+        # Конвертируем sentiment в label: positive=1, negative=-1, neutral=0
+        label_map = {"positive": 1, "negative": -1, "neutral": 0}
+        label = label_map.get(sentiment, 0)
+        
+        log_news(
+            dt=datetime.now().isoformat(timespec="seconds"),
+            ticker=ticker,
+            headline=text[:300],
+            label=label,
+            source="llm",
+            confidence=confidence
+        )
 
 def smart_classify(text: str, ticker: str = None) -> str:
     """Умная классификация с кэшированием"""

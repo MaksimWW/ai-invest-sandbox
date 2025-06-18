@@ -63,10 +63,46 @@ async def _fetch(url: str):
                 await asyncio.sleep(2 ** attempt)   # 2s, 4s
     return None
 
-async def async_fetch_all(hours: int = 24):
+async def async_fetch_all(hours: int = 24, ticker: str = None, log_to_cache: bool = False):
+    """
+    Fetches RSS feeds and optionally logs headlines to news cache
+    
+    Args:
+        hours: Hours to look back for news
+        ticker: Ticker symbol for logging
+        log_to_cache: Whether to log headlines to db/storage
+    """
     cutoff = dt.datetime.utcnow() - dt.timedelta(hours=hours)
     tasks  = [_fetch(u) for u in RSS_FEEDS.values()]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     fails = sum(1 for r in results if not r or isinstance(r, Exception))
     record("rss_batch", {"total": len(results), "fails": fails})
+    
+    # Если требуется логирование в кэш новостей
+    if log_to_cache and ticker:
+        from db.storage import insert as log_news
+        
+        # Парсим заголовки из RSS результатов
+        headlines = []
+        for result in results:
+            if result and not isinstance(result, Exception):
+                # Простой парсинг заголовков (предполагаем RSS XML)
+                if "<title>" in result:
+                    import re
+                    titles = re.findall(r'<title[^>]*>([^<]+)</title>', result)
+                    headlines.extend(titles[:5])  # Берем первые 5 заголовков
+        
+        # Логируем найденные заголовки
+        current_time = dt.datetime.utcnow().isoformat(timespec="seconds")
+        for headline in headlines:
+            if headline and ticker.upper() in headline.upper():
+                log_news(
+                    dt=current_time,
+                    ticker=ticker,
+                    headline=headline[:300],
+                    label=0,  # Neutral по умолчанию, будет переопределено при анализе
+                    source="rss",
+                    confidence=0.3
+                )
+    
     return results
