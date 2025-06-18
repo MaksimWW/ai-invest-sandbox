@@ -581,6 +581,10 @@ def run_Telegram_bot():
                     bot.reply_to(msg, f"Новостей по {ticker} за {hours} ч нет.")
                     return
                 
+                # ── DEDUP: убираем повторяющиеся заголовки ───────────────────
+                seen = set()
+                rows = [r for r in rows if not (r[1] in seen or seen.add(r[1]))][:5]
+                
                 def emoji(lbl):
                     return {1:"👍", -1:"👎", 0:"⚪"}.get(lbl, "❓")
                 
