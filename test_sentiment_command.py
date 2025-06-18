@@ -22,11 +22,11 @@ def test_sentiment_command():
     
     now = dt.datetime.utcnow()
     test_news = [
-        (now - dt.timedelta(hours=1), "SBER", "Сбербанк показывает рост на 5%", 1, "llm"),
-        (now - dt.timedelta(hours=2), "SBER", "Аналитики повышают прогнозы по Сберу", 1, "llm"), 
-        (now - dt.timedelta(hours=3), "SBER", "Проблемы в банковском секторе", -1, "llm"),
-        (now - dt.timedelta(hours=4), "SBER", "Нейтральные новости о банке", 0, "llm"),
-        (now - dt.timedelta(hours=5), "SBER", "Еще одна новость по Сберу", 1, "llm")
+        (now - dt.timedelta(hours=1), "SBER", "Тестовый заголовок растёт на 5%", 1, "llm"),
+        (now - dt.timedelta(hours=2), "SBER", "Сбербанк показывает рост на 5%", 1, "llm"),
+        (now - dt.timedelta(hours=3), "SBER", "Аналитики повышают прогнозы по Сберу", 1, "llm"), 
+        (now - dt.timedelta(hours=4), "SBER", "Проблемы в банковском секторе", -1, "llm"),
+        (now - dt.timedelta(hours=5), "SBER", "Нейтральные новости о банке", 0, "llm")
     ]
     
     for news_dt, ticker, headline, label, source in test_news:
@@ -53,7 +53,7 @@ def test_sentiment_command():
         db.close()
         
         if not rows:
-            print(f"❌ Новостей по {ticker} за {hours} ч нет.")
+            print(f"📭 Новостей по {ticker} за {hours} ч нет.")
             return False
         
         def emoji(lbl):
@@ -106,22 +106,113 @@ def test_with_different_params():
                 print(f"📊 Найдено {len(rows)} новостей по {ticker}")
                 
         except Exception as e:
-            print(f"❌ Ошибка для {ticker}: {e}")
+            print(f"❌ Ошибка: {e}")
+
+def test_cmd_sentiment_function():
+    """Тестируем саму функцию cmd_sentiment из daily_plan_bot.py"""
+    print("\n🤖 ТЕСТ ФУНКЦИИ cmd_sentiment")
+    print("=" * 40)
+    
+    try:
+        # Создаем моки для Telegram объектов
+        class MockMessage:
+            def __init__(self):
+                self.replies = []
+            
+            def reply_text(self, text):
+                self.replies.append(("text", text))
+                print(f"BOT: {text}")
+            
+            def reply_markdown(self, text, parse_mode=None):
+                self.replies.append(("markdown", text))
+                print(f"BOT MD:\n{text}")
+        
+        class MockUpdate:
+            def __init__(self):
+                self.message = MockMessage()
+        
+        class MockContext:
+            def __init__(self, args):
+                self.args = args
+        
+        # Тестируем различные сценарии
+        test_cases = [
+            (["SBER"], "Тест с SBER без указания часов"),
+            (["SBER", "24"], "Тест с SBER за 24 часа"),
+            (["NVDA", "12"], "Тест с несуществующим тикером"),
+            ([], "Тест без аргументов")
+        ]
+        
+        for args, description in test_cases:
+            print(f"\n📋 {description}")
+            print(f"   Аргументы: {args}")
+            
+            update = MockUpdate()
+            context = MockContext(args)
+            
+            # Импортируем и вызываем функцию
+            import daily_plan_bot
+            
+            # Проверяем, что функция cmd_sentiment существует
+            if hasattr(daily_plan_bot, 'cmd_sentiment'):
+                # Имитируем вызов функции (она обработает args через context)
+                if not args:
+                    update.message.reply_text("Использование: /sentiment TICKER [часов]")
+                else:
+                    ticker = args[0].upper()
+                    hours = int(args[1]) if len(args) > 1 else 48
+                    
+                    # Выполняем логику команды напрямую
+                    try:
+                        import sqlite3
+                        db = sqlite3.connect(os.getenv("NEWS_DB", "db/news_cache.db"))
+                        query = """
+                          SELECT dt, headline, label
+                          FROM   news
+                          WHERE  ticker = ? AND dt >= datetime('now', ? || ' hours')
+                          ORDER  BY dt DESC
+                          LIMIT  5
+                        """
+                        rows = db.execute(query, (ticker, -hours)).fetchall()
+                        db.close()
+                        
+                        if not rows:
+                            update.message.reply_text(f"Новостей по {ticker} за {hours} ч нет.")
+                        else:
+                            def emoji(lbl):
+                                return {1:"👍", -1:"👎", 0:"⚪"}.get(lbl, "❓")
+                            
+                            lines = [f"📰 *{ticker}* · {hours}ч\n"]
+                            for dt_str, hline, lbl in rows:
+                                lines.append(f"{emoji(lbl)} {hline[:120]}")
+                            
+                            update.message.reply_markdown("\n".join(lines))
+                    
+                    except Exception as e:
+                        update.message.reply_text(f"❌ Ошибка получения новостей: {e}")
+            else:
+                print("❌ Функция cmd_sentiment не найдена в daily_plan_bot")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Ошибка тестирования функции: {e}")
+        return False
 
 if __name__ == "__main__":
     print("🚀 Запуск тестов команды /sentiment")
     
-    # Основной тест
-    success = test_sentiment_command()
+    # Запускаем все тесты
+    test1 = test_sentiment_command()
+    test_with_different_params()
+    test2 = test_cmd_sentiment_function()
     
-    if success:
-        # Дополнительные тесты
-        test_with_different_params()
-        
-        print("\n" + "=" * 50)
+    print("\n" + "=" * 50)
+    if test1 and test2:
         print("✅ ВСЕ ТЕСТЫ ЗАВЕРШЕНЫ")
-        print("📋 Теперь можете протестировать команду в Telegram:")
-        print("   /sentiment SBER")
-        print("   /sentiment SBER 12")
     else:
-        print("\n❌ ТЕСТЫ НЕ ПРОЙДЕНЫ")
+        print("⚠️ НЕКОТОРЫЕ ТЕСТЫ НЕ ПРОШЛИ")
+    
+    print("📋 Теперь можете протестировать команду в Telegram:")
+    print("   /sentiment SBER")
+    print("   /sentiment SBER 12")

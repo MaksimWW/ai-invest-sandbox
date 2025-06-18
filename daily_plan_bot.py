@@ -549,13 +549,24 @@ def run_Telegram_bot():
                 return
             
             ticker = parts[1].upper()
-            hours = int(parts[2]) if len(parts) > 2 else 48
+            try:
+                hours = int(parts[2]) if len(parts) > 2 else 48
+            except ValueError:
+                bot.reply_to(msg, "❌ Неверный формат часов. Используйте число.")
+                return
             
             try:
                 import sqlite3
                 import os
                 
-                db = sqlite3.connect(os.getenv("NEWS_DB", "db/news_cache.db"))
+                db_path = os.getenv("NEWS_DB", "db/news_cache.db")
+                
+                # Проверяем существование базы данных
+                if not os.path.exists(db_path):
+                    bot.reply_to(msg, f"❌ База данных новостей не найдена: {db_path}")
+                    return
+                
+                db = sqlite3.connect(db_path)
                 query = """
                   SELECT dt, headline, label
                   FROM   news
@@ -579,6 +590,8 @@ def run_Telegram_bot():
                 
                 bot.reply_to(msg, "\n".join(lines), parse_mode="Markdown")
                 
+            except sqlite3.Error as e:
+                bot.reply_to(msg, f"❌ Ошибка базы данных: {e}")
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения новостей: {e}")
 
