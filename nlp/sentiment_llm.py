@@ -6,6 +6,7 @@ from typing import Optional, Dict, List
 import openai
 import redis
 from functools import lru_cache
+from health.metrics import record
 
 # Конфигурация из переменных окружения
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -86,6 +87,14 @@ def call_openai_sync(prompt: Dict[str, str], max_tokens: int = LLM_MAXTOK, tempe
             temperature=temperature,
             timeout=10
         )
+
+        usage = response.usage
+        record("gpt_tokens", {
+            "model":        response.model,
+            "prompt":       usage.prompt_tokens,
+            "completion":   usage.completion_tokens,
+            "total":        usage.total_tokens
+        })
 
         result = response.choices[0].message.content.strip().lower()
 
