@@ -26,45 +26,94 @@ class SimpleRedis:
                 break
                 
     def handle_client(self, client):
+        buffer = b""
         while True:
             try:
-                data = client.recv(1024).decode('utf-8')
+                data = client.recv(1024)
                 if not data:
                     break
                     
-                response = self.process_command(data.strip())
-                client.send(response.encode('utf-8'))
+                buffer += data
+                while b'\r\n' in buffer:
+                    line, buffer = buffer.split(b'\r\n', 1)
+                    if line:
+                        response = self.process_resp_command(buffer, line)
+                        if response:
+                            client.send(response)
+                            buffer = b""  # Очищаем буфер после обработки команды
+                            break
             except:
                 break
         client.close()
         
-    def process_command(self, command):
-        parts = command.split()
+    def process_resp_command(self, buffer, first_line):
+        """Обрабатывает команды в формате RESP (Redis Serialization Protocol)"""
+        try:
+            first_line = first_line.decode('utf-8')
+            
+            # Простая обработка массивов команд (*<count>)
+            if first_line.startswith('*'):
+                count = int(first_line[1:])
+                parts = []
+                
+                # Извлекаем части команды из буфера
+                lines = buffer.split(b'\r\n')
+                arg_index = 0
+                
+                for i in range(count):
+                    if arg_index < len(lines) and lines[arg_index].startswith(b'$'):
+                        length = int(lines[arg_index][1:])
+                        if arg_index + 1 < len(lines):
+                            arg_value = lines[arg_index + 1].decode('utf-8')
+                            parts.append(arg_value)
+                            arg_index += 2
+                        else:
+                            return None
+                
+                if len(parts) >= count:
+                    return self.execute_command(parts)
+                    
+            return b"-ERR invalid command format\r\n"
+            
+        except Exception as e:
+            return b"-ERR protocol error\r\n"
+    
+    def execute_command(self, parts):
+        """Выполняет Redis команду"""
         if not parts:
-            return "-ERR empty command\r\n"
+            return b"-ERR empty command\r\n"
             
         cmd = parts[0].upper()
         
         if cmd == "PING":
-            return "+PONG\r\n"
+            return b"+PONG\r\n"
         elif cmd == "SET" and len(parts) >= 3:
-            key, value = parts[1], " ".join(parts[2:])
+            key, value = parts[1], parts[2]
             self.data[key] = value
-            return "+OK\r\n"
+            return b"+OK\r\n"
+        elif cmd == "SETEX" and len(parts) >= 4:
+            key, ttl, value = parts[1], int(parts[2]), parts[3]
+            self.data[key] = value
+            # Простая реализация без TTL (для совместимости)
+            return b"+OK\r\n"
         elif cmd == "GET" and len(parts) >= 2:
             key = parts[1]
             value = self.data.get(key)
             if value is None:
-                return "$-1\r\n"
-            return f"${len(value)}\r\n{value}\r\n"
+                return b"$-1\r\n"
+            value_bytes = value.encode('utf-8')
+            return f"${len(value_bytes)}\r\n{value}\r\n".encode('utf-8')
         elif cmd == "DEL" and len(parts) >= 2:
             key = parts[1]
             if key in self.data:
                 del self.data[key]
-                return ":1\r\n"
-            return ":0\r\n"
+                return b":1\r\n"
+            return b":0\r\n"
+        elif cmd == "FLUSHALL":
+            self.data.clear()
+            return b"+OK\r\n"
         
-        return "-ERR unknown command\r\n"
+        return b"-ERR unknown command\r\n"
 
 if __name__ == "__main__":
     # Проверяем аргументы для daemonize
