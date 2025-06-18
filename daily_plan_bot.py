@@ -247,35 +247,7 @@ def run_Telegram_bot():
         bot.get_me()  # Проверяем соединение
         print("✅ Соединение с Telegram API установлено")
         
-        # Проверяем, что нет других экземпляров бота
-        try:
-            import psutil
-            current_pid = os.getpid()
-            bot_processes = []
-            for proc in psutil.process_iter(['pid', 'cmdline']):
-                try:
-                    cmdline = proc.info.get('cmdline', [])
-                    if (cmdline and 
-                        any('daily_plan_bot.py' in str(cmd) for cmd in cmdline) and 
-                        proc.info['pid'] != current_pid):
-                        bot_processes.append(proc.info['pid'])
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            
-            if bot_processes:
-                print(f"⚠️ Обнаружены другие экземпляры бота: {bot_processes}")
-                print("🛑 Останавливаем их автоматически...")
-                for pid in bot_processes:
-                    try:
-                        psutil.Process(pid).terminate()
-                        print(f"   • Остановлен PID {pid}")
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        continue
-                print("⏱️ Ждем 3 секунды...")
-                import time
-                time.sleep(3)
-        except ImportError:
-            print("📦 psutil не установлен, проверка процессов пропущена")
+        # Простая проверка соединения без сложной логики
 
         # Проверяем настройку внешних API
         newsapi_key = os.getenv("NEWSAPI_KEY")
