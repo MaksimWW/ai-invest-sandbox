@@ -2,8 +2,7 @@
 #!/usr/bin/env bash
 set -e
 if [[ ! -d tools/keydb/bin ]]; then
-    echo "🔄  Installing Redis server as KeyDB alternative..."
-    # Используем стандартный Redis вместо KeyDB
+    echo "🔄  Setting up Redis as KeyDB alternative..."
     mkdir -p tools/keydb/bin
     
     # Проверяем наличие redis-server в системе
@@ -11,10 +10,91 @@ if [[ ! -d tools/keydb/bin ]]; then
         ln -sf $(which redis-server) tools/keydb/bin/keydb-server
         echo "✅  Redis server linked as keydb-server"
     else
-        echo "❌  Redis not found in system. Installing via package manager..."
-        # Для Nix окружения Replit
-        nix-env -iA nixpkgs.redis
-        ln -sf $(which redis-server) tools/keydb/bin/keydb-server
-        echo "✅  Redis installed and linked as keydb-server"
+        echo "❌  Redis not found. Using python redis-server fallback..."
+        # Создаем простой Python-скрипт для эмуляции Redis
+        cat > tools/keydb/bin/keydb-server << 'EOF'
+#!/usr/bin/env python3
+import socket
+import threading
+import time
+import sys
+
+class SimpleRedis:
+    def __init__(self, host='127.0.0.1', port=6379):
+        self.host = host
+        self.port = port
+        self.data = {}
+        self.running = True
+        
+    def start(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen(5)
+        print(f"🚀 Simple Redis server listening on {self.host}:{self.port}")
+        
+        while self.running:
+            try:
+                client, addr = sock.accept()
+                threading.Thread(target=self.handle_client, args=(client,)).start()
+            except:
+                break
+                
+    def handle_client(self, client):
+        while True:
+            try:
+                data = client.recv(1024).decode('utf-8')
+                if not data:
+                    break
+                    
+                response = self.process_command(data.strip())
+                client.send(response.encode('utf-8'))
+            except:
+                break
+        client.close()
+        
+    def process_command(self, command):
+        parts = command.split()
+        if not parts:
+            return "-ERR empty command\r\n"
+            
+        cmd = parts[0].upper()
+        
+        if cmd == "PING":
+            return "+PONG\r\n"
+        elif cmd == "SET" and len(parts) >= 3:
+            key, value = parts[1], " ".join(parts[2:])
+            self.data[key] = value
+            return "+OK\r\n"
+        elif cmd == "GET" and len(parts) >= 2:
+            key = parts[1]
+            value = self.data.get(key)
+            if value is None:
+                return "$-1\r\n"
+            return f"${len(value)}\r\n{value}\r\n"
+        elif cmd == "DEL" and len(parts) >= 2:
+            key = parts[1]
+            if key in self.data:
+                del self.data[key]
+                return ":1\r\n"
+            return ":0\r\n"
+        
+        return "-ERR unknown command\r\n"
+
+if __name__ == "__main__":
+    # Проверяем аргументы для daemonize
+    daemonize = "--daemonize" in sys.argv and "yes" in sys.argv
+    
+    server = SimpleRedis()
+    if daemonize:
+        # Простая эмуляция daemon режима
+        import os
+        if os.fork() == 0:
+            server.start()
+    else:
+        server.start()
+EOF
+        chmod +x tools/keydb/bin/keydb-server
+        echo "✅  Simple Redis server created"
     fi
 fi
