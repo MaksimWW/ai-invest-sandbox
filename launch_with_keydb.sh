@@ -4,7 +4,19 @@
 echo "🔄 Stopping all existing bot processes..."
 pkill -f "daily_plan_bot.py" || true
 pkill -f "python.*daily_plan_bot" || true
-sleep 3
+pkill -f "keydb-server" || true
+pkill -f "redis-server" || true
+
+# Проверяем, что процессы действительно остановлены
+echo "⏱️ Ждем полной остановки процессов..."
+sleep 5
+
+# Дополнительная проверка и принудительная остановка
+if pgrep -f "daily_plan_bot" > /dev/null; then
+    echo "🔥 Принудительная остановка зависших процессов..."
+    pkill -9 -f "daily_plan_bot" || true
+    sleep 2
+fi
 
 echo "🔄 Checking for Redis/KeyDB server..."
 
@@ -118,7 +130,9 @@ finally:
         echo "✅ Redis сервер успешно запущен"
     else
         echo "❌ Не удалось запустить Redis сервер"
+        echo "🔍 Попытка принудительного запуска Python fallback..."
     fi
+fi
 fi
 
 echo "🔍 Тестируем Redis подключение..."
