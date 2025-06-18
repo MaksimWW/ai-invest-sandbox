@@ -3,6 +3,7 @@
 import requests
 import datetime as dt
 import os
+from health.metrics import record
 
 # Переменная для отключения GDELT (по умолчанию отключен)
 GDELT_ENABLED = os.getenv("GDELT_ENABLED", "0") == "1"
@@ -21,7 +22,13 @@ def _newsapi_query(q, from_dt):
     }
     r = requests.get(url, params=params, timeout=6)
     r.raise_for_status()
-    return [a["title"] for a in r.json().get("articles", [])]
+    resp = r.json()
+    retrieved = len(resp.get("articles", []))
+    record("newsapi_call", {
+        "ticker": q,
+        "articles": retrieved
+    })
+    return [a["title"] for a in resp.get("articles", [])]
 
 def _gdelt_query(q, from_dt):
     """GDELT функция отключена - возвращает пустой список"""
