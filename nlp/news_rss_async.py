@@ -8,6 +8,7 @@ import time
 import cachetools
 import datetime as dt
 import functools
+from health.metrics import record
 
 RSS_FEEDS = {
     "moex_issuer": "https://www.moex.com/export/news.aspx?news=issuer&lang=ru",
@@ -65,4 +66,7 @@ async def _fetch(url: str):
 async def async_fetch_all(hours: int = 24):
     cutoff = dt.datetime.utcnow() - dt.timedelta(hours=hours)
     tasks  = [_fetch(u) for u in RSS_FEEDS.values()]
-    return await asyncio.gather(*tasks, return_exceptions=True)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    fails = sum(1 for r in results if not r or isinstance(r, Exception))
+    record("rss_batch", {"total": len(results), "fails": fails})
+    return results
