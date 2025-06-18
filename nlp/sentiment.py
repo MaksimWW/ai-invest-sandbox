@@ -411,6 +411,11 @@ def analyze_sentiment_trend(texts: List[str]) -> Dict[str, float]:
 def classify(text: str) -> str:
     return classify_ru(text)
 
+def classify_llm(text: str) -> str:
+    """Алиас для LLM классификации через sentiment_llm модуль"""
+    from nlp.sentiment_llm import smart_classify
+    return smart_classify(text)
+
 def fetch_ru_news(hours: int = 24) -> list[str]:
     """Возвращает заголовки всех русских RSS за N часов."""
     try:
