@@ -246,6 +246,23 @@ def run_Telegram_bot():
         bot = telebot.TeleBot(TELEGRAM_TOKEN)
         bot.get_me()  # Проверяем соединение
         print("✅ Соединение с Telegram API установлено")
+        
+        # Проверяем, что нет других экземпляров бота
+        import psutil
+        current_pid = os.getpid()
+        bot_processes = []
+        for proc in psutil.process_iter(['pid', 'cmdline']):
+            try:
+                if ('daily_plan_bot.py' in ' '.join(proc.info['cmdline']) and 
+                    proc.info['pid'] != current_pid):
+                    bot_processes.append(proc.info['pid'])
+            except:
+                continue
+        
+        if bot_processes:
+            print(f"⚠️ Обнаружены другие экземпляры бота: {bot_processes}")
+            print("💡 Остановите их командой: pkill -f daily_plan_bot.py")
+            return
 
         # Проверяем настройку внешних API
         newsapi_key = os.getenv("NEWSAPI_KEY")

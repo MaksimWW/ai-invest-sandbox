@@ -19,3 +19,4 @@ aiohttp>=3.9
 async_timeout>=4.0
 cachetools>=5.3
 tailer
+psutil

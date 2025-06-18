@@ -53,5 +53,13 @@ while True:
         echo "🚀 Python Redis fallback started."
     fi
 fi
-# 3) start the original repl command
+# 3) check for existing bot processes
+BOT_PIDS=$(pgrep -f "daily_plan_bot.py" | head -1)
+if [ ! -z "$BOT_PIDS" ]; then
+    echo "⚠️ Обнаружен запущенный бот (PID: $BOT_PIDS). Останавливаем..."
+    pkill -f "daily_plan_bot.py" || true
+    sleep 2
+fi
+
+# 4) start the original repl command
 python daily_plan_bot.py
