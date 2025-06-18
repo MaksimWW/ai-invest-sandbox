@@ -114,7 +114,7 @@ def test_cmd_sentiment_function():
     print("=" * 40)
     
     try:
-        # Создаем моки для Telegram объектов
+        # Создаем простые моки без сложных Telegram объектов
         class MockMessage:
             def __init__(self):
                 self.replies = []
@@ -150,48 +150,55 @@ def test_cmd_sentiment_function():
             update = MockUpdate()
             context = MockContext(args)
             
-            # Импортируем и вызываем функцию
-            import daily_plan_bot
-            
-            # Проверяем, что функция cmd_sentiment существует
-            if hasattr(daily_plan_bot, 'cmd_sentiment'):
-                # Имитируем вызов функции (она обработает args через context)
-                if not args:
-                    update.message.reply_text("Использование: /sentiment TICKER [часов]")
-                else:
-                    ticker = args[0].upper()
-                    hours = int(args[1]) if len(args) > 1 else 48
-                    
-                    # Выполняем логику команды напрямую
-                    try:
-                        import sqlite3
-                        db = sqlite3.connect(os.getenv("NEWS_DB", "db/news_cache.db"))
-                        query = """
-                          SELECT dt, headline, label
-                          FROM   news
-                          WHERE  ticker = ? AND dt >= datetime('now', ? || ' hours')
-                          ORDER  BY dt DESC
-                          LIMIT  5
-                        """
-                        rows = db.execute(query, (ticker, -hours)).fetchall()
-                        db.close()
-                        
-                        if not rows:
-                            update.message.reply_text(f"Новостей по {ticker} за {hours} ч нет.")
-                        else:
-                            def emoji(lbl):
-                                return {1:"👍", -1:"👎", 0:"⚪"}.get(lbl, "❓")
-                            
-                            lines = [f"📰 *{ticker}* · {hours}ч\n"]
-                            for dt_str, hline, lbl in rows:
-                                lines.append(f"{emoji(lbl)} {hline[:120]}")
-                            
-                            update.message.reply_markdown("\n".join(lines))
-                    
-                    except Exception as e:
-                        update.message.reply_text(f"❌ Ошибка получения новостей: {e}")
+            # Имитируем логику команды cmd_sentiment напрямую
+            if not args:
+                update.message.reply_text("Использование: /sentiment TICKER [часов]")
             else:
-                print("❌ Функция cmd_sentiment не найдена в daily_plan_bot")
+                ticker = args[0].upper()
+                try:
+                    hours = int(args[1]) if len(args) > 1 else 48
+                except ValueError:
+                    update.message.reply_text("❌ Неверный формат часов. Используйте число.")
+                    continue
+                
+                try:
+                    import sqlite3
+                    import os
+                    
+                    db_path = os.getenv("NEWS_DB", "db/news_cache.db")
+                    
+                    # Проверяем существование базы данных
+                    if not os.path.exists(db_path):
+                        update.message.reply_text(f"❌ База данных новостей не найдена: {db_path}")
+                        continue
+                    
+                    db = sqlite3.connect(db_path)
+                    query = """
+                      SELECT dt, headline, label
+                      FROM   news
+                      WHERE  ticker = ? AND dt >= datetime('now', ? || ' hours')
+                      ORDER  BY dt DESC
+                      LIMIT  5
+                    """
+                    rows = db.execute(query, (ticker, -hours)).fetchall()
+                    db.close()
+                    
+                    if not rows:
+                        update.message.reply_text(f"Новостей по {ticker} за {hours} ч нет.")
+                    else:
+                        def emoji(lbl):
+                            return {1:"👍", -1:"👎", 0:"⚪"}.get(lbl, "❓")
+                        
+                        lines = [f"📰 *{ticker}* · {hours}ч\n"]
+                        for dt_str, hline, lbl in rows:
+                            lines.append(f"{emoji(lbl)} {hline[:120]}")
+                        
+                        update.message.reply_markdown("\n".join(lines))
+                
+                except sqlite3.Error as e:
+                    update.message.reply_text(f"❌ Ошибка базы данных: {e}")
+                except Exception as e:
+                    update.message.reply_text(f"❌ Ошибка получения новостей: {e}")
         
         return True
         
