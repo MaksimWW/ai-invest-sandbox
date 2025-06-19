@@ -111,18 +111,43 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info("📊 /signals - запрос торговых сигналов")
         
-        message = """📊 **Торговые сигналы**
-
-⚠️ DEMO режим - тестовые сигналы:
-
-• **YNDX**: 🟢 BUY (сила: 75%)
-  └ SMA прорыв + позитивные новости
-  
-• **FXIT**: 🟡 HOLD (сила: 45%)
-  └ Боковое движение, ждем сигнала
-
-🕐 Обновлено: только что
-💡 Для реальных сигналов требуется настройка API"""
+        # Получаем реальные сигналы
+        from signals.sma_breakout import generate_signal
+        
+        api_connected = check_api_connection()
+        mode_text = "✅ Реальные SMA сигналы" if api_connected else "⚠️ DEMO режим"
+        
+        message = f"📊 **Торговые сигналы (SMA 20/50)**\n\n{mode_text}:\n\n"
+        
+        # Генерируем сигналы для основных тикеров
+        main_tickers = ["YNDX", "FXIT", "GAZP", "SBER"]
+        
+        for ticker in main_tickers:
+            figi = FIGI_MAP.get(ticker)
+            if figi:
+                try:
+                    signal = generate_signal(figi, interval='hour', fast=20, slow=50)
+                    signal_emoji = {"BUY": "🟢", "SELL": "🔴", "HOLD": "🟡"}.get(signal, "⚪")
+                    
+                    signal_desc = {
+                        "BUY": "SMA20 пересекла SMA50 ↗️",
+                        "SELL": "SMA20 пересекла SMA50 ↘️", 
+                        "HOLD": "Боковое движение, нет пересечения"
+                    }.get(signal, "Неизвестный сигнал")
+                    
+                    message += f"• **{ticker}**: {signal_emoji} {signal}\n"
+                    message += f"  └ {signal_desc}\n\n"
+                    
+                except Exception as e:
+                    message += f"• **{ticker}**: ❌ Ошибка анализа\n\n"
+                    logger.error(f"Ошибка сигнала {ticker}: {e}")
+        
+        message += f"🕐 Обновлено: только что\n"
+        message += f"📈 Интервал: часовые свечи\n"
+        message += f"📊 Индикатор: SMA(20) vs SMA(50)"
+        
+        if not api_connected:
+            message += "\n💡 Для реальных данных настройте TINKOFF_SANDBOX_TOKEN"
         
         await update.message.reply_text(message, parse_mode='Markdown')
         logger.info("✅ /signals - отправлены")
