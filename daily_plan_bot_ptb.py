@@ -180,7 +180,58 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """Обработчик ошибок"""
     logger.error(f"❌ Ошибка: {context.error}")
 
+def check_and_stop_other_bots():
+    """Проверяет и останавливает другие экземпляры бота"""
+    import psutil
+    import time
+    
+    print("🔍 Проверка других экземпляров бота...")
+    
+    current_pid = os.getpid()
+    killed_count = 0
+    
+    bot_files = [
+        'daily_plan_bot_ptb.py',
+        'daily_plan_bot.py', 
+        'daily_plan_bot_fixed.py',
+        'daily_plan_bot_mock.py'
+    ]
+    
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            if proc.info['pid'] == current_pid:
+                continue  # Пропускаем текущий процесс
+                
+            cmdline = proc.info['cmdline']
+            if cmdline and len(cmdline) > 1:
+                if 'python' in cmdline[0].lower():
+                    for bot_file in bot_files:
+                        if any(bot_file in cmd for cmd in cmdline):
+                            print(f"🔴 Найден другой экземпляр: PID {proc.info['pid']}")
+                            try:
+                                proc.terminate()
+                                proc.wait(timeout=3)
+                                print(f"✅ Экземпляр {proc.info['pid']} остановлен")
+                                killed_count += 1
+                            except psutil.TimeoutExpired:
+                                proc.kill()
+                                print(f"🔥 Экземпляр {proc.info['pid']} принудительно завершен")
+                                killed_count += 1
+                            except Exception as e:
+                                print(f"❌ Ошибка остановки: {e}")
+                            break
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    
+    if killed_count > 0:
+        print(f"🛑 Остановлено экземпляров: {killed_count}")
+        print("⏱️ Ждем 3 секунды...")
+        time.sleep(3)
+    else:
+        print("✅ Других экземпляров не найдено")
+
 def run_bot() -> None:
+    print("🚀 Запуск Telegram-бота (PTB v20)")
     print("🔧 Инициализация бота...")
     print(f"📱 Token: {TOKEN[:10] if TOKEN else 'НЕ НАЙДЕН'}...")
     
@@ -190,6 +241,12 @@ def run_bot() -> None:
     if not TOKEN:
         print("❌ ОШИБКА: TELEGRAM_TOKEN не найден в переменных окружения!")
         return
+    
+    # Останавливаем другие экземпляры перед запуском
+    try:
+        check_and_stop_other_bots()
+    except Exception as e:
+        print(f"⚠️ Ошибка при проверке других экземпляров: {e}")
     
     try:
         application = ApplicationBuilder().token(TOKEN).build()
@@ -214,7 +271,13 @@ def run_bot() -> None:
         application.run_polling(allowed_updates=["message", "callback_query"])
         
     except Exception as e:
-        print(f"❌ ОШИБКА ЗАПУСКА БОТА: {e}")
+        error_msg = str(e)
+        if "Conflict: terminated by other getUpdates request" in error_msg:
+            print("❌ КОНФЛИКТ: Обнаружен другой экземпляр бота!")
+            print("🔧 Попробуйте запустить: python stop_all_bots.py")
+            print("🔄 Затем перезапустите бота")
+        else:
+            print(f"❌ ОШИБКА ЗАПУСКА БОТА: {e}")
         logger.error(f"Критическая ошибка: {e}")
         return
 
