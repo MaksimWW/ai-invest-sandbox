@@ -6,6 +6,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
+from tinkoff_api import get_prices_with_fallback, check_api_connection, format_price_change
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")  # возьмёт из Secrets
 
@@ -77,15 +78,26 @@ async def cmd_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info("📈 /prices - запрос цен акций")
         
-        message = """📈 **Текущие цены акций**
-
-⚠️ DEMO режим - тестовые данные:
-
-• **YNDX**: 2,450.50 ₽ 📈 (+1.2%)
-• **FXIT**: 1,180.25 ₽ 📉 (-0.8%)
-
-🕐 Обновлено: только что
-💡 Для реальных данных требуется настройка Tinkoff API"""
+        # Получаем цены через новый модуль
+        prices = get_prices_with_fallback()
+        api_connected = check_api_connection()
+        
+        if api_connected:
+            mode_text = "✅ Реальные данные Tinkoff API"
+        else:
+            mode_text = "⚠️ DEMO режим - тестовые данные"
+        
+        # Формируем сообщение
+        message = f"📈 **Текущие цены акций**\n\n{mode_text}:\n\n"
+        
+        for ticker, price in prices.items():
+            change_icon = format_price_change(price, demo_mode=not api_connected)
+            message += f"• **{ticker}**: {price:,.2f} ₽ {change_icon}\n"
+        
+        message += f"\n🕐 Обновлено: только что"
+        
+        if not api_connected:
+            message += "\n💡 Для реальных данных настройте TINKOFF_SANDBOX_TOKEN"
         
         await update.message.reply_text(message, parse_mode='Markdown')
         logger.info("✅ /prices - отправлены")
@@ -124,17 +136,30 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         logger.info("⚙️ /status - проверка статуса системы")
         
-        message = """⚙️ **Статус системы**
+        # Проверяем статус Tinkoff API
+        tinkoff_status = "✅ Работает" if check_api_connection() else "⚠️ Не настроен"
+        tinkoff_token = "✅ Настроен" if os.getenv("TINKOFF_SANDBOX_TOKEN") else "❌ Отсутствует"
+        
+        # Проверяем другие переменные окружения
+        openai_key = "✅ Настроен" if os.getenv("OPENAI_API_KEY") else "❌ Отсутствует"
+        sheets_url = "✅ Настроен" if os.getenv("SHEETS_WEBHOOK_URL") else "❌ Отсутствует"
+        
+        message = f"""⚙️ **Статус системы**
 
 🔗 **API подключения:**
 • Telegram API: ✅ Работает
-• Tinkoff API: ⚠️ Не настроен
+• Tinkoff API: {tinkoff_status}
 • Google Sheets: ⚠️ Не настроен
 • OpenAI API: ⚠️ Не настроен
 
+🔑 **Токены и ключи:**
+• TINKOFF_SANDBOX_TOKEN: {tinkoff_token}
+• OPENAI_API_KEY: {openai_key}
+• SHEETS_WEBHOOK_URL: {sheets_url}
+
 📊 **Функции:**
 • Отправка сообщений: ✅ 
-• Получение цен: ⚠️ DEMO режим
+• Получение цен: {'✅ Реальные данные' if check_api_connection() else '⚠️ DEMO режим'}
 • Торговые сигналы: ⚠️ DEMO режим
 • Логирование: ⚠️ Не настроено
 
