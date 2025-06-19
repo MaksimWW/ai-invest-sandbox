@@ -113,6 +113,7 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Получаем реальные сигналы
         from signals.sma_breakout import generate_signal
+        from tinkoff_api import FIGI_MAP
         
         api_connected = check_api_connection()
         mode_text = "✅ Реальные SMA сигналы" if api_connected else "⚠️ DEMO режим"
