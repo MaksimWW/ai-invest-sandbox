@@ -9,13 +9,17 @@ from telegram.ext import (
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")  # возьмёт из Secrets
 
+# Настраиваем красивое логирование
 logging.basicConfig(
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    level=logging.INFO,  # Включаем подробные логи для отладки
+    format="%(asctime)s │ %(message)s",
+    level=logging.INFO,
+    datefmt="%H:%M:%S"
 )
-# Включаем логи для отладки
-logging.getLogger("httpx").setLevel(logging.INFO)
-logging.getLogger("telegram").setLevel(logging.INFO)
+
+# Отключаем избыточные HTTP логи
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,7 @@ logger = logging.getLogger(__name__)
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/start — приветствие и краткая справка"""
     try:
-        logger.info(f"Команда /start от пользователя {update.effective_user.id}")
+        logger.info("🚀 /start - запуск бота")
         
         message = """🤖 **AI Invest PlanBot запущен!**
 
@@ -36,7 +40,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💡 Отправьте /help для подробной информации!"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
-        logger.info("Команда /start выполнена успешно")
+        logger.info("✅ /start - выполнено")
         
     except Exception as e:
         logger.error(f"Ошибка в cmd_start: {e}")
@@ -45,7 +49,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/help — справка по командам"""
     try:
-        logger.info(f"Команда /help от пользователя {update.effective_user.id}")
+        logger.info("❓ /help - справка по командам")
         
         message = """🤖 **Справка по командам AI Invest PlanBot**
 
@@ -62,7 +66,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Бот анализирует рынок акций, генерирует торговые сигналы и ведет автоматическую отчетность."""
         
         await update.message.reply_text(message, parse_mode='Markdown')
-        logger.info("Команда /help выполнена успешно")
+        logger.info("✅ /help - выполнено")
         
     except Exception as e:
         logger.error(f"Ошибка в cmd_help: {e}")
@@ -71,7 +75,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/prices — показать текущие цены акций"""
     try:
-        logger.info(f"Команда /prices от пользователя {update.effective_user.id}")
+        logger.info("📈 /prices - запрос цен акций")
         
         message = """📈 **Текущие цены акций**
 
@@ -84,7 +88,7 @@ async def cmd_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💡 Для реальных данных требуется настройка Tinkoff API"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
-        logger.info("Команда /prices выполнена успешно")
+        logger.info("✅ /prices - отправлены")
         
     except Exception as e:
         logger.error(f"Ошибка в cmd_prices: {e}")
@@ -93,7 +97,7 @@ async def cmd_prices(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/signals — показать торговые сигналы"""
     try:
-        logger.info(f"Команда /signals от пользователя {update.effective_user.id}")
+        logger.info("📊 /signals - запрос торговых сигналов")
         
         message = """📊 **Торговые сигналы**
 
@@ -109,7 +113,7 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💡 Для реальных сигналов требуется настройка API"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
-        logger.info("Команда /signals выполнена успешно")
+        logger.info("✅ /signals - отправлены")
         
     except Exception as e:
         logger.error(f"Ошибка в cmd_signals: {e}")
@@ -118,7 +122,7 @@ async def cmd_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/status — показать статус системы"""
     try:
-        logger.info(f"Команда /status от пользователя {update.effective_user.id}")
+        logger.info("⚙️ /status - проверка статуса системы")
         
         message = """⚙️ **Статус системы**
 
@@ -140,7 +144,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 3. SHEETS_WEBHOOK_URL в .env"""
         
         await update.message.reply_text(message, parse_mode='Markdown')
-        logger.info("Команда /status выполнена успешно")
+        logger.info("✅ /status - отправлен")
         
     except Exception as e:
         logger.error(f"Ошибка в cmd_status: {e}")
@@ -149,7 +153,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ─────────────── запуск ───────────────
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик ошибок"""
-    logger.error(f"Ошибка при обработке обновления {update}: {context.error}")
+    logger.error(f"❌ Ошибка: {context.error}")
 
 def run_bot() -> None:
     print("🔧 Инициализация бота...")
@@ -181,7 +185,7 @@ def run_bot() -> None:
         print("🛑 Для остановки: Ctrl+C")
         print("-" * 50)
         
-        logger.info("Bot started 🚀 (PTB v20)")
+        logger.info("🤖 Бот запущен и готов к работе")
         application.run_polling(allowed_updates=["message", "callback_query"])
         
     except Exception as e:
