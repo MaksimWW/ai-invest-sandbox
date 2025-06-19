@@ -211,6 +211,21 @@ def run_daily_analysis():
         print("📈 Анализируем торговые сигналы...")
         signals = get_signals()
 
+        # Проверяем автоматическую торговлю
+        auto_trades = []
+        if os.getenv("AUTO_TRADE", "0") == "1":
+            print("🤖 Проверяем возможности автоматической торговли...")
+            from trade.auto import auto_trade
+            
+            for figi, ticker in FIGIS.items():
+                if ticker in prices:
+                    ok, msg = auto_trade(figi, prices[ticker], ticker)
+                    if ok:
+                        auto_trades.append(f"💰 {ticker}: авто-{msg}")
+                        print(f"✅ Автоматическая сделка {ticker}: {msg}")
+                    elif "score" in msg:
+                        print(f"📊 {ticker}: {msg}")
+
         # Логируем сделки по сигналам
         print("📝 Логируем торговые сигналы...")
         for figi, ticker in FIGIS.items():
@@ -219,6 +234,10 @@ def run_daily_analysis():
 
         # Формируем сообщение
         message = format_message(prices, signals)
+        
+        # Добавляем информацию об автоматических сделках
+        if auto_trades:
+            message += "\n\n🤖 Автоматические сделки:\n" + "\n".join(auto_trades)
 
         # Отправляем или выводим в консоль
         if is_telegram_configured():
@@ -441,6 +460,9 @@ def run_Telegram_bot():
 Пример: /ideas 5 15 0.5 6 NVDA AMD  (новости за 6 часов)
 По умолчанию: /ideas 5 15 0 24 (все тикеры, новости за 24ч)
 
+/composite [ticker...] - показать композитный скор (теханализ + новости)
+Пример: /composite SBER GAZP (скор ≥3 = автоматическая торговля)
+
 /pnl - показать общий P/L
 /debug - показать лог отладки
 /config - показать конфигурацию Google Sheets
@@ -598,6 +620,38 @@ def run_Telegram_bot():
                 bot.reply_to(msg, f"❌ Ошибка базы данных: {e}")
             except Exception as e:
                 bot.reply_to(msg, f"❌ Ошибка получения новостей: {e}")
+
+        elif text.startswith("/composite"):
+            parts = text.split()
+            try:
+                tickers = [t.upper() for t in parts[1:]] if len(parts) > 1 else list(FIGI_MAP.keys())
+            except (ValueError, IndexError):
+                bot.reply_to(msg, "Формат: /composite [TICKER...]\nПример: /composite SBER GAZP")
+                return
+
+            from signals.composite import get_composite_score
+            reply = "📊 Композитные скоры:\n"
+            
+            for ticker in tickers:
+                figi = FIGI_MAP.get(ticker)
+                if not figi:
+                    reply += f"• {ticker:<6} → 🚫 нет FIGI\n"
+                    continue
+                    
+                try:
+                    score = get_composite_score(figi)
+                    if abs(score) >= 3:
+                        emoji = "🔥" if score > 0 else "❄️"
+                        reply += f"• {ticker:<6} → {emoji} {score:+d} (АВТО!)\n"
+                    elif abs(score) >= 2:
+                        emoji = "🟢" if score > 0 else "🔴"
+                        reply += f"• {ticker:<6} → {emoji} {score:+d}\n"
+                    else:
+                        reply += f"• {ticker:<6} → ⚪ {score:+d}\n"
+                except Exception as e:
+                    reply += f"• {ticker:<6} → ⚠️ Ошибка: {e}\n"
+                    
+            bot.reply_to(msg, reply)
 
         elif text.startswith("/debug"):
             try:
