@@ -1,7 +1,6 @@
 git+https://github.com/Tinkoff/invest-python.git
 python-dotenv
 pandas
-grpcio==1.63.0      # фиксируем рабочую версию gRPC
 tinkoff-investments
 requests
 pytelegrambotapi
