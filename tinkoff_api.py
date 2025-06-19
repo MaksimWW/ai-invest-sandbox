@@ -23,6 +23,17 @@ INSTRUMENTS = {
     "SBER": "BBG0047315Y7",  # Сбербанк
 }
 
+# Обратная карта для совместимости с другими модулями
+FIGI_MAP = {
+    "YNDX": "BBG004730N88",
+    "FXIT": "BBG00Y91R9T3", 
+    "GAZP": "BBG004730RP0",
+    "SBER": "BBG0047315Y7",
+    "LKOH": "BBG004730ZJ9",
+    "NVDA": "BBG000BBJQV0",
+    "AMD":  "BBG000BBQCY0",
+}
+
 def check_api_connection() -> bool:
     """Проверяет подключение к Tinkoff API"""
     if not TINKOFF_TOKEN:
