@@ -1,0 +1,71 @@
+# Блок 1. Авто-ордер при composite-score ≥ 3
+# ──────────────────────────────────────────────────────────
+# 0) Предпосылки
+#    • в signals/composite.py уже есть   get_composite_score(figi)  → int
+#    • sandbox TOKEN настроен, логика log_trade → webhook уже работает
+#
+# 1. СОЗДАТЬ  trade/auto.py
+# ────────────────────────────────────────────────
+# import os, datetime as dt, traceback, tinkoff.invest as ti
+# from signals.composite import get_composite_score
+# from trade.logger  import log_trade      # (<- функция, которая шлёт в Google-Sheet)
+#
+# ACCOUNT = os.getenv("TKS_SANDBOX_ACC")         # после setup_sandbox.py
+# TOKEN   = os.getenv("TINKOFF_SANDBOX_TOKEN")
+# AUTO_ON = os.getenv("AUTO_TRADE","0") == "1"
+#
+# FIX_QTY = int(os.getenv("AUTO_QTY","1"))       # по 1 лоту на сигнал
+#
+# def auto_trade(figi:str, price_rub:float, ticker:str):
+#     if not AUTO_ON:
+#         return False, "auto-off"
+#
+#     score = get_composite_score(figi)
+#     if abs(score) < 3:
+#         return False, "score<3"
+#
+#     side  = ti.LimitOrderRequest.LimitOrderDirection.BUY if score > 0 else ti.LimitOrderRequest.LimitOrderDirection.SELL
+#
+#     try:
+#         with ti.Client(TOKEN, app_name="auto-trade") as c:
+#             resp = c.sandbox.post_sandbox_order(
+#                 account_id = ACCOUNT,
+#                 figi       = figi,
+#                 price      = ti.Quotation(units=int(price_rub), nano=0),
+#                 quantity   = FIX_QTY,
+#                 direction  = side,
+#                 order_type = ti.OrderType.OPERATION_TYPE_LIMIT,
+#                 order_id   = f"auto-{dt.datetime.utcnow().timestamp():.0f}"
+#             )
+#         # логируем в Sheet
+#         log_trade(
+#             date = dt.date.today().isoformat(),
+#             ticker = ticker,
+#             figi   = figi,
+#             side   = "BUY" if score>0 else "SELL",
+#             price  = price_rub,
+#             qty    = FIX_QTY,
+#             fees   = 0.0
+#         )
+#         return True, f"orderId {resp.order_id}"
+#     except Exception as e:
+#         traceback.print_exc()
+#         return False, str(e)
+# ────────────────────────────────────────────────
+#
+# 2. В daily_plan_bot.py (или расписной джобе, где строится дневной план)
+#    • после того как получаете   price_list[ticker] = last_price
+#      добавьте:
+#        from trade.auto import auto_trade
+#        ok,msg = auto_trade(figi, last_price, ticker)
+#        if ok:
+#            plan_lines.append(f"💰 {ticker}: авто-{msg}")
+#
+# 3. Secrets / .env
+#    AUTO_TRADE=1          # вкл / выкл
+#    AUTO_QTY=1            # сколько лотов на сигнал
+#    TKS_SANDBOX_ACC=<uuid аккаунта>  # из setup_sandbox.py
+#
+# 4. Ничего другого не менять.  Работает только в песочнице!
+# ──────────────────────────────────────────────────────────
+# DONE
