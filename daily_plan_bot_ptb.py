@@ -11,8 +11,12 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")  # возьмёт из Secrets
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    level=logging.INFO,
+    level=logging.WARNING,  # Уменьшаем детализацию
 )
+# Отключаем логи HTTP запросов
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 # ──────────────── ХЭНДЛЕРЫ ────────────────
