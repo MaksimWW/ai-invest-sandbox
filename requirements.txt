@@ -11,3 +11,4 @@ aiohttp
 async_timeout
 cachetools
 aiosqlite
+psutil==5.9.8
