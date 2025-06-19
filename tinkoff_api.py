@@ -30,9 +30,10 @@ def check_api_connection() -> bool:
     
     try:
         with Client(TINKOFF_TOKEN, app_name="ai-invest-bot") as client:
-            # Простая проверка - получаем информацию об аккаунтах
-            accounts = client.users.get_accounts()
-            return len(accounts.accounts) > 0
+            # Простая проверка - пробуем получить цену одного инструмента
+            test_figi = "BBG004730N88"  # YNDX
+            response = client.market_data.get_last_prices(figi=[test_figi])
+            return len(response.last_prices) > 0
     except Exception as e:
         logger.error(f"Ошибка подключения к Tinkoff API: {e}")
         return False
