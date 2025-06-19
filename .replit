@@ -3,7 +3,6 @@ modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
-packages = ["glibcLocales", "imagemagick_light"]
 
 [unitTest]
 language = "python3"
@@ -14,75 +13,3 @@ requiredFiles = [".replit", "replit.nix"]
 [deployment]
 run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
-
-[workflows]
-runButton = "Run Bot"
-
-[[workflows.workflow]]
-name = "Telegram Bot"
-author = 42562777
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
-
-[[workflows.workflow]]
-name = "Telegram Bot with KeyDB"
-author = 42562777
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
-
-[[workflows.workflow]]
-name = "KeyDB Bot (Clean)"
-author = 42562777
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
-
-[[workflows.workflow]]
-name = "Safe Bot Start"
-author = 42562777
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "echo \"🛑 Stopping all processes...\""
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"daily_plan_bot\" || true"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"keydb-server\" || true"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"redis-server\" || true"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "sleep 5"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "echo \"🚀 Starting clean bot instance...\""
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash launch_with_keydb.sh"
-
-[[workflows.workflow]]
-name = "Run Bot"
-author = 42562777
-mode = "sequential"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash launch_with_keydb.sh"
