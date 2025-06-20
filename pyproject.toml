@@ -1,3 +1,31 @@
+
+[tool.poetry]
+name = "python-template"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+tinkoff-investments = "^0.2.0b59"
+python-dotenv = "*"
+requests = "*"
+python-telegram-bot = "20.8"
+openai = "1.25.0"
+pandas = "*"
+numpy = "*"
+redis = "*"
+aiohttp = "*"
+async-timeout = "*"
+cachetools = "*"
+aiosqlite = "*"
+psutil = "5.9.8"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [project]
 name = "python-template"
 version = "0.1.0"
