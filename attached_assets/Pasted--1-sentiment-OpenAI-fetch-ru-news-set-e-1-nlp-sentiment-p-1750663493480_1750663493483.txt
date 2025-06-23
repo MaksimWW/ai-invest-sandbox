@@ -1,0 +1,77 @@
+# ──── ПУНКТ 1: sentiment через OpenAI + fetch_ru_news ────
+set -e
+
+### 1. Расширяем nlp/sentiment.py
+grep -q "def rss_sentiment_summary" nlp/sentiment.py || cat >> nlp/sentiment.py <<'PY'
+
+# ───────────────────────────────────────────────────────────
+#  RSS-Sentiment summary (OpenAI)
+# ───────────────────────────────────────────────────────────
+import os, json, openai
+from collections import Counter
+from typing import Dict
+
+def rss_sentiment_summary(hours: int = 24) -> Dict[str, int]:
+    """
+    Возвращает {'positive': N, 'neutral': M, 'negative': K} для русских RSS-новостей
+    за *hours* часов.  Может вернуть пустой dict, если новостей нет.
+    Требует переменной окружения OPENAI_API_KEY.
+    """
+    headlines = fetch_ru_news(hours)
+    if not headlines:
+        return {}
+
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    if not openai.api_key:
+        raise RuntimeError("OPENAI_API_KEY не установлен")
+
+    prompt = (
+        "Классифицируй тональность заголовков (positive / neutral / negative) "
+        "и выведи JSON вида {\"positive\":N,\"neutral\":M,\"negative\":K}.\n\n"
+        + "\n".join(f"- {h}" for h in headlines[:25])  # ≤25 строк, чтобы уложиться в токены
+    )
+
+    chat = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=50,
+        temperature=0,
+    )
+    try:
+        counts = json.loads(chat.choices[0].message.content.strip())
+        # приводим к int и заполняем отсутствующие ключи нулями
+        total = Counter({k: int(counts.get(k, 0)) for k in ("positive", "neutral", "negative")})
+        return dict(total)
+    except Exception:
+        return {}
+PY
+
+### 2. Обновляем /sentiment-команду в боте (PTB v20)
+sed -i '
+/def cmd_sentiment(/,/^$/c\
+def cmd_sentiment(update: Update, context: ContextTypes.DEFAULT_TYPE):\
+    \"\"\"/sentiment — сводка тональности русских новостей\"\"\"\
+    from nlp.sentiment import rss_sentiment_summary\
+    try:\
+        counts = rss_sentiment_summary(24)\
+        if not counts:\
+            update.message.reply_text(\"⚠️ Нет свежих новостей или OpenAI недоступен\")\
+            return\
+        msg = \"📊 Тональность за 24 ч:\\n\" + \"\\n\".join(f\"{k}: {v}\" for k, v in counts.items())\
+        update.message.reply_text(msg)\
+    except Exception as e:\
+        update.message.reply_text(f\"❌ Ошибка sentiment: {e}\")' \
+daily_plan_bot_ptb.py
+
+### 3. Мини-тест (не обращается к OpenAI, только к fetch_ru_news)
+mkdir -p tests
+cat > tests/test_sentiment_basic.py <<'PY'
+from nlp.sentiment import fetch_ru_news
+def test_fetch_ru_nonerror():
+    """fetch_ru_news должен всегда возвращать list (возможно пустой)."""
+    headlines = fetch_ru_news(1)
+    assert isinstance(headlines, list)
+PY
+
+### 4. Проверяем
+pytest -q -rs
