@@ -448,3 +448,44 @@ def fetch_ru_news(hours: int = 24) -> list[str]:
                 if art.get("title"):
                     headlines.append(art["title"])
     return headlines
+
+# ───────────────────────────────────────────────────────────
+#  RSS-Sentiment summary (OpenAI)
+# ───────────────────────────────────────────────────────────
+import os, json, openai
+from collections import Counter
+from typing import Dict
+
+def rss_sentiment_summary(hours: int = 24) -> Dict[str, int]:
+    """
+    Возвращает {'positive': N, 'neutral': M, 'negative': K} для русских RSS-новостей
+    за *hours* часов.  Может вернуть пустой dict, если новостей нет.
+    Требует переменной окружения OPENAI_API_KEY.
+    """
+    headlines = fetch_ru_news(hours)
+    if not headlines:
+        return {}
+
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    if not openai.api_key:
+        raise RuntimeError("OPENAI_API_KEY не установлен")
+
+    prompt = (
+        "Классифицируй тональность заголовков (positive / neutral / negative) "
+        "и выведи JSON вида {\"positive\":N,\"neutral\":M,\"negative\":K}.\n\n"
+        + "\n".join(f"- {h}" for h in headlines[:25])  # ≤25 строк, чтобы уложиться в токены
+    )
+
+    chat = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=50,
+        temperature=0,
+    )
+    try:
+        counts = json.loads(chat.choices[0].message.content.strip())
+        # приводим к int и заполняем отсутствующие ключи нулями
+        total = Counter({k: int(counts.get(k, 0)) for k in ("positive", "neutral", "negative")})
+        return dict(total)
+    except Exception:
+        return {}
