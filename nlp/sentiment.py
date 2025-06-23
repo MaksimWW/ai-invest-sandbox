@@ -414,11 +414,6 @@ def classify_llm(text: str) -> str:
     """Алиас для LLM классификации через sentiment_llm модуль"""
     from nlp.sentiment_llm import smart_classify
     return smart_classify(text)
-
-def fetch_ru_news(hours: int = 24) -> list[str]:
-    """Возвращает заголовки всех русских RSS за N часов."""
-    try:
-        return asyncio.run(async_fetch_all(hours))
     except RuntimeError:
         # если уже в running loop (pytest etc.)
         loop = asyncio.get_event_loop()
@@ -428,26 +423,6 @@ def fetch_ru_news(hours: int = 24) -> list[str]:
 # ------------------------------------------------------------------------
 from datetime import datetime, timedelta
 from nlp.news_feed import _rss_query
-
-def fetch_ru_news(hours: int = 24) -> list[str]:
-    """
-    Быстрый сбор всех русскоязычных RSS-заголовков за последние *hours* часов.
-    Используется в тестах и в команде /sentiment.
-    """
-    feeds = [
-        "https://www.vedomosti.ru/rss/articles",
-        "https://lenta.ru/rss/top7",
-        "https://www.rbc.ru/v10/news.rss",
-    ]
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
-    headlines: list[str] = []
-
-    for url in feeds:
-        for art in _rss_query(url):
-            if art.get("dt") and art["dt"] >= cutoff:
-                if art.get("title"):
-                    headlines.append(art["title"])
-    return headlines
 
 # ───────────────────────────────────────────────────────────
 #  RSS-Sentiment summary (OpenAI)
@@ -489,3 +464,67 @@ def rss_sentiment_summary(hours: int = 24) -> Dict[str, int]:
         return dict(total)
     except Exception:
         return {}
+
+
+# ─────────────────────────────────────────────────────────────
+# 🚀 robust fetch_ru_news — берёт все RSS-ленты, где бы они ни хранились
+# ─────────────────────────────────────────────────────────────
+from datetime import datetime, timedelta
+
+
+# ─────────────────────────────────────────────────────────────
+# 🚀 robust fetch_ru_news — собирает 🇷🇺 RSS-заголовки за N часов
+# ─────────────────────────────────────────────────────────────
+from datetime import datetime, timedelta
+
+    cutoff  = datetime.utcnow() - timedelta(hours=hours)
+    titles: list[str] = []
+
+    for url in _FEEDS:
+        try:
+            for art in _rss_query(url):
+                if (
+                    art.get("dt") and art["dt"] >= cutoff
+                    and art.get("title")
+                ):
+                    titles.append(art["title"].strip())
+        except Exception:
+            # падающий источник просто пропускаем
+            continue
+    return titles
+
+
+# ─────────────────────────────────────────────────────────────
+# 🚀 robust fetch_ru_news — собирает 🇷🇺 RSS-заголовки за N часов
+# ─────────────────────────────────────────────────────────────
+from datetime import datetime, timedelta
+def fetch_ru_news(hours: int = 24) -> list[str]:
+    """Возвращает русскоязычные заголовки за *hours* часов."""
+    # ➊ пытаемся найти список лент
+    try:
+        from nlp.news_feed import RSS_FEED_URLS as _FEEDS            # современный вариант
+    except ImportError:
+        try:
+            from nlp.news_rss_async import RSS_FEEDS as _DICT        # старый словарь
+            _FEEDS = list(_DICT.values())
+        except ImportError:
+            _FEEDS = []                                              # ничего не нашли
+
+    # ➋ берём парсер RSS-ленты
+    try:
+        from nlp.news_feed import _rss_query
+    except ImportError:
+        return []
+
+    cutoff  = datetime.utcnow() - timedelta(hours=hours)
+    titles: list[str] = []
+
+    for url in _FEEDS:
+        try:
+            for art in _rss_query(url):
+                if art.get("dt") and art["dt"] >= cutoff and art.get("title"):
+                    titles.append(art["title"].strip())
+        except Exception:
+            continue    # падающий источник пропускаем
+    return titles
+

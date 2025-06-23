@@ -1,0 +1,62 @@
+python3 - <<'PY'
+import pathlib, re, textwrap, subprocess, sys
+sent = pathlib.Path("nlp/sentiment.py")
+
+# ── удалить ЛЮБОЙ старый fetch_ru_news (если он есть) ────────────────
+txt = sent.read_text(encoding="utf-8")
+txt = re.sub(
+    r"\n\s*def\s+fetch_ru_news[\s\S]+?\n\s*return[^\n]*\n",  # достаточно надёжно
+    "\n",
+    txt,
+    count=1,
+    flags=re.M,
+)
+
+# ── вставить ПОЛНУЮ, самодостаточную версию функции ──────────────────
+new_code = textwrap.dedent("""
+    # ─────────────────────────────────────────────────────────────
+    # 🚀 robust fetch_ru_news — собирает 🇷🇺 RSS-заголовки за N часов
+    # ─────────────────────────────────────────────────────────────
+    from datetime import datetime, timedelta
+    def fetch_ru_news(hours: int = 24) -> list[str]:
+        \"\"\"Возвращает русскоязычные заголовки за *hours* часов.\"\"\"
+        # ➊ пытаемся найти список лент
+        try:
+            from nlp.news_feed import RSS_FEED_URLS as _FEEDS            # современный вариант
+        except ImportError:
+            try:
+                from nlp.news_rss_async import RSS_FEEDS as _DICT        # старый словарь
+                _FEEDS = list(_DICT.values())
+            except ImportError:
+                _FEEDS = []                                              # ничего не нашли
+
+        # ➋ берём парсер RSS-ленты
+        try:
+            from nlp.news_feed import _rss_query
+        except ImportError:
+            return []
+
+        cutoff  = datetime.utcnow() - timedelta(hours=hours)
+        titles: list[str] = []
+
+        for url in _FEEDS:
+            try:
+                for art in _rss_query(url):
+                    if art.get("dt") and art["dt"] >= cutoff and art.get("title"):
+                        titles.append(art["title"].strip())
+            except Exception:
+                continue    # падающий источник пропускаем
+        return titles
+""")
+
+sent.write_text(txt.rstrip() + "\n\n" + new_code + "\n", encoding="utf-8")
+print("✓ sentiment.py: fetch_ru_news переписан")
+
+# ── быстрый smoke-тест ───────────────────────────────────────────────
+from nlp.sentiment import fetch_ru_news
+for h in (3, 6, 12):
+    print(f"{h:>2} ч → {len(fetch_ru_news(h))} заголовков")
+
+print("\npytest …")
+subprocess.run(["pytest", "-q", "-rs"], check=False)
+PY
