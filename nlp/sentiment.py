@@ -1,6 +1,5 @@
 from functools import lru_cache
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
-import torch, requests, datetime as dt, re
+# ⬇ отключено: from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
 from news_feed import fetch_news
 from nlp.news_rss_async import async_fetch_all
 import asyncio
@@ -424,3 +423,28 @@ def fetch_ru_news(hours: int = 24) -> list[str]:
         # если уже в running loop (pytest etc.)
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(async_fetch_all(hours))
+# ------------------------------------------------------------------------
+# ↓↓↓ MINI-RSS helper: 🇷🇺-заголовки за N часов
+# ------------------------------------------------------------------------
+from datetime import datetime, timedelta
+from nlp.news_feed import _rss_query
+
+def fetch_ru_news(hours: int = 24) -> list[str]:
+    """
+    Быстрый сбор всех русскоязычных RSS-заголовков за последние *hours* часов.
+    Используется в тестах и в команде /sentiment.
+    """
+    feeds = [
+        "https://www.vedomosti.ru/rss/articles",
+        "https://lenta.ru/rss/top7",
+        "https://www.rbc.ru/v10/news.rss",
+    ]
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    headlines: list[str] = []
+
+    for url in feeds:
+        for art in _rss_query(url):
+            if art.get("dt") and art["dt"] >= cutoff:
+                if art.get("title"):
+                    headlines.append(art["title"])
+    return headlines

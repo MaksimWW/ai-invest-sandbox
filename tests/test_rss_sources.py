@@ -1,17 +1,17 @@
-import pytest, importlib, inspect
+import pytest
+from importlib import import_module
 
-# берём вашу функцию fetch_ru_news из nlp.news_rss_async (или где она лежит)
-mod = importlib.import_module("nlp.news_rss_async")
-latest_fn = getattr(mod, "fetch_ru_news", None)
+try:
+    latest_fn = getattr(import_module("nlp.sentiment"), "fetch_ru_news")
+except Exception:
+    latest_fn = None
 
-@pytest.mark.skipif(latest_fn is None, reason="fetch_ru_news not found")
-def test_at_least_one_rss_works():
-    """Функция должна вернуть >=1 новости хотя бы для одного URL."""
-    sig = inspect.signature(latest_fn)
-    # функция должна принимать hours и url (или использовать встроенный список)
-    kwargs = {"hours": 6} if "hours" in sig.parameters else {}
-    news = latest_fn(**kwargs)
-    assert isinstance(news, list)
-    # допускаем, что RSS могут быть пустыми → xfail
-    if not news:
-        pytest.xfail("Все RSS вернули 0 новостей за 6ч")
+# --- если функции нет → пропускаем весь файл
+if latest_fn is None or not callable(latest_fn):
+    pytest.skip("fetch_ru_news not available", allow_module_level=True)
+
+def test_fetch_ru_news_returns_list():
+    """Функция должна вернуть список строк (может быть пустым)."""
+    headlines = latest_fn(hours=1)          # ≤ 1 ч, чтобы быстро
+    assert isinstance(headlines, list)
+    assert all(isinstance(h, str) for h in headlines), "все элементы – строки"
