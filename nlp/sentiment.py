@@ -414,10 +414,6 @@ def classify_llm(text: str) -> str:
     """Алиас для LLM классификации через sentiment_llm модуль"""
     from nlp.sentiment_llm import smart_classify
     return smart_classify(text)
-    except RuntimeError:
-        # если уже в running loop (pytest etc.)
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(async_fetch_all(hours))
 # ------------------------------------------------------------------------
 # ↓↓↓ MINI-RSS helper: 🇷🇺-заголовки за N часов
 # ------------------------------------------------------------------------
