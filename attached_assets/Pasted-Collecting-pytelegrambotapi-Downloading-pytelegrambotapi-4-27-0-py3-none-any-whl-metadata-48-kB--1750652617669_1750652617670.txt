@@ -1,0 +1,50 @@
+Collecting pytelegrambotapi
+  Downloading pytelegrambotapi-4.27.0-py3-none-any.whl.metadata (48 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 48.3/48.3 kB 860.0 kB/s eta 0:00:00
+Collecting requests (from pytelegrambotapi)
+  Downloading requests-2.32.4-py3-none-any.whl.metadata (4.9 kB)
+Collecting charset_normalizer<4,>=2 (from requests->pytelegrambotapi)
+  Downloading charset_normalizer-3.4.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (35 kB)
+Collecting idna<4,>=2.5 (from requests->pytelegrambotapi)
+  Downloading idna-3.10-py3-none-any.whl.metadata (10 kB)
+Collecting urllib3<3,>=1.21.1 (from requests->pytelegrambotapi)
+  Downloading urllib3-2.5.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting certifi>=2017.4.17 (from requests->pytelegrambotapi)
+  Downloading certifi-2025.6.15-py3-none-any.whl.metadata (2.4 kB)
+Downloading pytelegrambotapi-4.27.0-py3-none-any.whl (287 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 287.4/287.4 kB 4.8 MB/s eta 0:00:00
+Downloading requests-2.32.4-py3-none-any.whl (64 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.8/64Downloading certifi-2025.6.15-py3-none-any.whl (157 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0.0/157
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 157.7/157.7 kB 8.5 MB/s eta 0:00:00
+Downloading charset_normalizer-3.4.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (147 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0.0/147
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 147.3/147.3 kB 7.8 MB/s eta 0:00:00
+Downloading idna-3.10-py3-none-any.whl (70 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0.0/70.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 70.4/70.4 kB 4.0 MB/s eta 0:00:00
+Downloading urllib3-2.5.0-py3-none-any.whl (129 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0.0/129
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 129.8/129.8 kB 9.4 MB/s eta 0:00:00
+Installing collected packages: urllib3, idna, charset_normalizer, certifi, requests, pytelegrambotapi
+  Attempting uninstall: urllib3
+    Found existing installation: urllib3 2.5.0
+    Uninstalling urllib3-2.5.0:
+      Successfully uninstalled urllib3-2.5.0
+  Attempting uninstall: idna
+    Found existing installation: idna 3.10
+    Uninstalling idna-3.10:
+      Successfully uninstalled idna-3.10
+  Attempting uninstall: charset_normalizer
+    Found existing installation: charset-normalizer 3.4.2
+    Uninstalling charset-normalizer-3.4.2:
+      Successfully uninstalled charset-normalizer-3.4.2
+  Attempting uninstall: certifi
+    Found existing installation: certifi 2025.6.15
+    Uninstalling certifi-2025.6.15:
+      Successfully uninstalled certifi-2025.6.15
+  Attempting uninstall: requests
+    Found existing installation: requests 2.32.4
+    Uninstalling requests-2.32.4:
+      Successfully uninstalled requests-2.32.4
+Successfully installed certifi-2025.6.15 charset_normalizer-3.4.2 idna-3.10 pytelegrambotapi-4.27.0 requests-2.32.4 urllib3-2.5.0

@@ -1,5 +1,5 @@
 entrypoint = "main.py"
-modules = ["python-3.11"]
+modules = ["nodejs-20", "python-3.11"]
 
 [nix]
 channel = "stable-24_05"
@@ -19,70 +19,78 @@ deploymentTarget = "cloudrun"
 runButton = "Run Bot"
 
 [[workflows.workflow]]
-name = "Telegram Bot"
+name   = "Telegram Bot"
 author = 42562777
-mode = "sequential"
+mode   = "sequential"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = ""
 
 [[workflows.workflow]]
-name = "Telegram Bot with KeyDB"
+name   = "Telegram Bot with KeyDB"
 author = 42562777
-mode = "sequential"
+mode   = "sequential"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = ""
 
 [[workflows.workflow]]
-name = "KeyDB Bot (Clean)"
+name   = "KeyDB Bot (Clean)"
 author = 42562777
-mode = "sequential"
+mode   = "sequential"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = ""
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = ""
 
 [[workflows.workflow]]
-name = "Safe Bot Start"
+name   = "Safe Bot Start"
 author = 42562777
-mode = "sequential"
+mode   = "sequential"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "echo \"🛑 Stopping all processes...\""
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "echo \"🛑 Stopping all processes...\""
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"daily_plan_bot\" || true"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "pkill -f \"daily_plan_bot\" || true"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"keydb-server\" || true"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "pkill -f \"keydb-server\"   || true"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pkill -f \"redis-server\" || true"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "pkill -f \"redis-server\"   || true"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "sleep 5"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "sleep 5"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "echo \"🚀 Starting clean bot instance...\""
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "echo \"🚀 Starting clean bot instance...\""
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash launch_with_keydb.sh"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "bash launch_with_keydb.sh"
 
 [[workflows.workflow]]
-name = "Run Bot"
+name   = "Run Bot"
 author = 42562777
-mode = "sequential"
+mode   = "sequential"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "bash launch_with_keydb.sh"
+  [[workflows.workflow.tasks]]
+  task = "shell.exec"
+  args = "bash launch_with_keydb.sh"
+
+# --- добавьте этот блок прямо в .replit -----------------------------
+[env]
+#  ▸ libstdc++.so.6 из установленного GCC-13  +  запасной путь в профиль
+LD_LIBRARY_PATH = "/nix/store/xvzz97yk73hw03v5dhhz3j47ggwf1yq1-gcc-13.2.0-lib/lib:${HOME}/.nix-profile/lib"
+#  ▸ директория, куда pip ставит пакеты с флагом --user
+PYTHONPATH      = "${HOME}/.local/lib/python3.11/site-packages"
+# --------------------------------------------------------------------
