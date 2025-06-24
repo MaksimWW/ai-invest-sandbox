@@ -496,3 +496,37 @@ def fetch_ru_news(hours: int = 24) -> list[str]:
             continue    # падающий источник пропускаем
     return titles
 
+
+# ─────────────────────────────────────────────────────────────
+# 🚀  fetch_ru_news  — собирает русскоязычные заголовки из всех
+#     известных RSS-лент (использует наш новый _rss_query выше)
+# ─────────────────────────────────────────────────────────────
+from datetime import datetime, timedelta
+def fetch_ru_news(hours: int = 24) -> list[str]:
+    """Все 🇷🇺-заголовки за последние *hours* часов (может вернуть пусто)."""
+    try:                                    # основной перечень
+        from nlp.news_feed import RSS_FEED_URLS as _FEEDS
+    except ImportError:
+        _FEEDS = []                         # если константы нет
+
+    # страховка: добавляем 6 «ручных» лент, если вдруг список пуст
+    if not _FEEDS:
+        _FEEDS = [
+            "https://lenta.ru/rss/news",
+            "https://tass.ru/rss/v2.xml",
+            "https://www.kommersant.ru/RSS/main.xml",
+            "https://www.moex.com/export/news.aspx?news=issuer&lang=ru",
+            "https://www.finam.ru/analysis/news/rsspoint",
+            "https://www.banki.ru/xml/news.rss",
+        ]
+
+    from nlp.news_feed import _rss_query      # импорт после проверки списка
+    cutoff  = datetime.utcnow() - timedelta(hours=hours)
+    titles: list[str] = []
+
+    for url in _FEEDS:
+        for art in _rss_query(url):
+            if art.get("dt") and art["dt"] >= cutoff and art.get("title"):
+                titles.append(art["title"].strip())
+
+    return titles
